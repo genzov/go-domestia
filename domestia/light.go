@@ -1,6 +1,6 @@
 package domestia
 
-import "github.com/victorjacobs/go-domestia/config"
+import "github.com/genzov/go-domestia/config"
 
 // Light represents a light as retrieved from Domestia controller.
 type Light struct {

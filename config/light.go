@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/victorjacobs/go-domestia/homeassistant"
+	"github.com/genzov/go-domestia/homeassistant"
 )
 
 type Light struct {

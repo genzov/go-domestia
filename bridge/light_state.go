@@ -3,8 +3,8 @@ package bridge
 import (
 	"encoding/json"
 
-	"github.com/victorjacobs/go-domestia/domestia"
-	"github.com/victorjacobs/go-domestia/homeassistant"
+	"github.com/genzov/go-domestia/domestia"
+	"github.com/genzov/go-domestia/homeassistant"
 )
 
 func homeAssistantStateJSON(l *domestia.Light) (string, error) {

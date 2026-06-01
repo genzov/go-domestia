@@ -1,4 +1,4 @@
-module github.com/victorjacobs/go-domestia
+module github.com/genzov/go-domestia
 
 go 1.21
 

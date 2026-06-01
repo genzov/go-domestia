@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/victorjacobs/go-domestia/config"
+	"github.com/genzov/go-domestia/config"
 )
 
 type relayState int

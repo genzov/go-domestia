@@ -8,9 +8,9 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/victorjacobs/go-domestia/config"
-	"github.com/victorjacobs/go-domestia/domestia"
-	"github.com/victorjacobs/go-domestia/homeassistant"
+	"github.com/genzov/go-domestia/config"
+	"github.com/genzov/go-domestia/domestia"
+	"github.com/genzov/go-domestia/homeassistant"
 )
 
 type Bridge struct {

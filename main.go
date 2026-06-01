@@ -5,8 +5,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/victorjacobs/go-domestia/bridge"
-	"github.com/victorjacobs/go-domestia/config"
+	"github.com/genzov/go-domestia/bridge"
+	"github.com/genzov/go-domestia/config"
 )
 
 // TODO mark everything as unavailable on shutdown
