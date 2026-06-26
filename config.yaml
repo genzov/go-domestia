@@ -1,0 +1,33 @@
+name: Domestia Bridge
+slug: go_domestia
+version: "1.0.0"
+description: Bridges a Domestia lighting controller to Home Assistant over MQTT
+url: https://github.com/genzov/go-domestia
+arch:
+  - armv7
+  - aarch64
+  - amd64
+image: "ghcr.io/genzov/go-domestia-{arch}"
+init: false
+options:
+  ip_address: "192.168.1.189"
+  refresh_frequency: 2000
+  mqtt:
+    ip_address: core-mosquitto
+    username: ""
+    password: ""
+  lights:
+    - name: Bureau
+      relay: 22
+schema:
+  ip_address: str
+  refresh_frequency: int?
+  mqtt:
+    ip_address: str
+    username: str
+    password: password
+  lights:
+    - name: str
+      relay: int
+      dimmable: bool?
+      always_on: bool?
