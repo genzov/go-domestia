@@ -51,6 +51,7 @@ func LoadConfiguration(filename string) (*Configuration, error) {
 func (m *MQTT) ClientOptions() *mqtt.ClientOptions {
 	return mqtt.NewClientOptions().
 		AddBroker(fmt.Sprintf("tcp://%v:1883", m.IpAddress)).
+		SetClientID("go-domestia").
 		SetUsername(m.Username).
 		SetPassword(m.Password).
 		SetAutoReconnect(true).
