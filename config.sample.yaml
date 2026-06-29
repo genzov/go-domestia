@@ -1,0 +1,51 @@
+# Sample Home Assistant add-on manifest with worked-out options.
+#
+# This file is for reference only — Home Assistant reads config.yaml, not this
+# file. config.yaml ships with empty defaults; the values below show what a
+# real configuration looks like (with placeholder IPs and credentials).
+name: Domestia Bridge
+slug: go_domestia
+version: "1.0.0"
+description: Bridges a Domestia lighting controller to Home Assistant over MQTT
+url: https://github.com/genzov/go-domestia
+arch:
+  - armv7
+  - aarch64
+  - amd64
+image: "ghcr.io/genzov/go-domestia-{arch}"
+init: false
+options:
+  # IP address of the Domestia controller on your network.
+  ip_address: "192.168.1.2"
+  # How often (ms) to poll the controller and publish state.
+  refresh_frequency: 2000
+  mqtt:
+    # core-mosquitto is the hostname of the official Mosquitto broker add-on.
+    ip_address: core-mosquitto
+    username: "username"
+    password: "password"
+  lights:
+    # relay  : the controller relay number this light is wired to.
+    # dimmable: true for dimmable channels (default false).
+    # always_on: keep the relay forced on at 100% (default false).
+    - name: Garden
+      relay: 2
+      dimmable: false
+    - name: Living room
+      relay: 13
+      dimmable: true
+    - name: Wardrobe
+      relay: 1
+      always_on: true
+schema:
+  ip_address: str
+  refresh_frequency: int?
+  mqtt:
+    ip_address: str
+    username: str
+    password: password
+  lights:
+    - name: str
+      relay: int
+      dimmable: bool?
+      always_on: bool?

@@ -175,3 +175,7 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Local runtime configuration — contains real IPs and MQTT credentials.
+# Use domestia.sample.json as a template.
+domestia.json

@@ -10,15 +10,13 @@ arch:
 image: "ghcr.io/genzov/go-domestia-{arch}"
 init: false
 options:
-  ip_address: "192.168.1.189"
+  ip_address: ""
   refresh_frequency: 2000
   mqtt:
     ip_address: core-mosquitto
     username: ""
     password: ""
-  lights:
-    - name: Bureau
-      relay: 22
+  lights: []
 schema:
   ip_address: str
   refresh_frequency: int?
