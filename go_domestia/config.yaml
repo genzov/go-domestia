@@ -3,6 +3,9 @@ slug: go_domestia
 version: "1.1.0"
 description: Bridges a Domestia lighting controller to Home Assistant over MQTT
 url: https://github.com/genzov/go-domestia
+stage: stable
+startup: application
+boot: auto
 arch:
   - armv7
   - aarch64
