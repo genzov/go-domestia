@@ -14,12 +14,12 @@ func TestDomestiaBrightness(t *testing.T) {
 		want uint8
 	}{
 		{"off", 0, 0},
-		{"max", 255, 63},
-		{"low value rounds up instead of collapsing to 0", 4, 1},
-		{"smallest value that maps to a dim level", 3, 1},
-		{"very low value still rounds to 0", 2, 0},
+		{"max", 255, 64},
+		{"lowest value still collapses to 0", 1, 0},
+		{"smallest value that maps to a dim level", 2, 1},
+		{"low value rounds to 1", 4, 1},
 		{"midpoint rounds to nearest", 128, 32},
-		{"out-of-range high value is clamped", 1000, 63},
+		{"out-of-range high value is clamped", 1000, 64},
 		{"negative value is clamped to 0", -10, 0},
 	}
 
@@ -40,10 +40,10 @@ func TestHomeAssistantBrightness(t *testing.T) {
 		want     int
 	}{
 		{"off", 0, 0},
-		{"max", 63, 255},
+		{"max", 64, 255},
 		{"low value", 1, 4},
-		{"midpoint rounds to nearest", 32, 130},
-		{"out-of-range value is clamped", 64, 255},
+		{"midpoint rounds to nearest", 32, 128},
+		{"out-of-range value is clamped", 100, 255},
 	}
 
 	for _, tt := range tests {

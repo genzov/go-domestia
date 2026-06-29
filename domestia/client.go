@@ -21,8 +21,9 @@ const (
 // controllerPort is the TCP port the Domestia controller listens on.
 const controllerPort = 52001
 
-// maxBrightness is the highest brightness value the controller accepts.
-const maxBrightness uint8 = 63
+// maxBrightness is the highest brightness value the controller accepts and
+// reports (the dim scale runs 0-64; a relay turned fully on reads back as 64).
+const maxBrightness uint8 = 64
 
 type Client struct {
 	mutex              *sync.Mutex
@@ -116,7 +117,7 @@ func (d *Client) setRelayState(relay uint8, state relayState) error {
 	return nil
 }
 
-// SetBrightness sets brightness of relay to given brightness. Brightness is an uint8, so values between 0 and 63.
+// SetBrightness sets brightness of relay to given brightness. Brightness is an uint8, so values between 0 and 64.
 func (d *Client) SetBrightness(relay uint8, brightness uint8) error {
 	command := []byte{
 		0x10, relay, brightness,
