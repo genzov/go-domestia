@@ -12,7 +12,7 @@ type Light struct {
 func NewLight(cfg *config.Light, brightness uint8) *Light {
 	// If brightness is exactly 1, the relay is not dimmable and on.
 	if brightness == 1 {
-		brightness = 63
+		brightness = maxBrightness
 	}
 
 	return &Light{
@@ -22,7 +22,7 @@ func NewLight(cfg *config.Light, brightness uint8) *Light {
 }
 
 func (l *Light) IsMaxBrightness() bool {
-	return l.Brightness == 63
+	return l.Brightness == maxBrightness
 }
 
 func (l *Light) IsMinBrightness() bool {

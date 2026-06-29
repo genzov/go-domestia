@@ -25,13 +25,12 @@ type MQTT struct {
 }
 
 func LoadConfiguration(filename string) (*Configuration, error) {
-	var file *os.File
-	var err error
-	if file, err = os.Open(filename); err != nil {
+	file, err := os.Open(filename)
+	if err != nil {
 		return nil, err
 	}
-
 	defer file.Close()
+
 	decoder := json.NewDecoder(file)
 	configuration := &Configuration{
 		RefreshFrequency: 2000,
@@ -43,6 +42,12 @@ func LoadConfiguration(filename string) (*Configuration, error) {
 	// Validate configuration
 	if configuration.IpAddress == "" {
 		return nil, errors.New("ip_address is required")
+	}
+	if configuration.MQTT == nil {
+		return nil, errors.New("mqtt configuration is required")
+	}
+	if configuration.RefreshFrequency <= 0 {
+		return nil, errors.New("refresh_frequency must be greater than 0")
 	}
 
 	return configuration, nil

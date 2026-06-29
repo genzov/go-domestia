@@ -18,7 +18,7 @@ type Bridge struct {
 	domestia      *domestia.Client
 	mqtt          mqtt.Client
 
-	// Channel to trigger an pull and publish state from controller
+	// Channel to trigger a pull and publish of controller state
 	updateChannel chan bool
 	// Map to store current brightnesses of lights, used to publish only on changes to state
 	relayToBrightness map[uint8]uint8
@@ -34,7 +34,9 @@ func New(cfg *config.Configuration) (*Bridge, error) {
 		configuration:     cfg,
 		domestia:          domestiaClient,
 		relayToBrightness: make(map[uint8]uint8),
-		updateChannel:     make(chan bool),
+		// Buffered so the MQTT callback never blocks when the run loop is busy
+		// publishing or has exited; a pending refresh is enough to coalesce.
+		updateChannel: make(chan bool, 1),
 	}, nil
 }
 
@@ -72,8 +74,11 @@ func (b *Bridge) connectMQTT() (mqtt.Client, error) {
 	opts := b.configuration.MQTT.ClientOptions()
 	// Configure MQTT subscriptions in the ConnectHandler to make sure they are set up after reconnect
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
+		// Log rather than exit: this runs on the MQTT client's goroutine, and
+		// killing the process here would defeat both auto-reconnect and the
+		// restart-on-error loop in main. The handler fires again on reconnect.
 		if err := b.setupLights(client); err != nil {
-			log.Fatalf("Failed to register with MQTT: %v", err)
+			log.Errorf("Failed to register with MQTT: %v", err)
 		}
 	})
 
@@ -87,10 +92,8 @@ func (b *Bridge) connectMQTT() (mqtt.Client, error) {
 
 // setupLights publishes Home Assistant configuration and subscribes to state updates
 func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
-	for _, l := range b.configuration.Lights {
-		light := l
-
-		// Lights that are always are not registered with Home Assistant
+	for _, light := range b.configuration.Lights {
+		// Always-on lights are not registered with Home Assistant
 		if light.AlwaysOn {
 			continue
 		}
@@ -121,20 +124,32 @@ func (b *Bridge) lightSubscriptionCallback(light *config.Light) func(mqttClient 
 
 		if cmd.State == "ON" {
 			log.Printf("Turning on %v", light.Name)
-			b.domestia.TurnOn(relay)
+			if err := b.domestia.TurnOn(relay); err != nil {
+				log.Errorf("Failed to turn on %v: %v", light.Name, err)
+			}
 
 			if !light.Dimmable {
-				b.domestia.SetMaxBrightness(relay)
+				if err := b.domestia.SetMaxBrightness(relay); err != nil {
+					log.Errorf("Failed to set %v to max brightness: %v", light.Name, err)
+				}
 			} else if cmd.Brightness != 0 {
-				b.domestia.SetBrightness(relay, domestiaBrightness(cmd))
+				if err := b.domestia.SetBrightness(relay, domestiaBrightness(cmd)); err != nil {
+					log.Errorf("Failed to set brightness of %v: %v", light.Name, err)
+				}
 			}
 		} else {
 			log.Printf("Turning off %v", light.Name)
-			b.domestia.TurnOff(relay)
+			if err := b.domestia.TurnOff(relay); err != nil {
+				log.Errorf("Failed to turn off %v: %v", light.Name, err)
+			}
 		}
 
-		// Trigger pulling and publishing controller state
-		b.updateChannel <- true
+		// Trigger pulling and publishing controller state. Non-blocking: if a
+		// refresh is already pending the ticker will pick up this change too.
+		select {
+		case b.updateChannel <- true:
+		default:
+		}
 	}
 }
 
@@ -174,17 +189,23 @@ func (b *Bridge) publishLightState() error {
 
 		if configuration.AlwaysOn && !light.IsMaxBrightness() {
 			// If the light is always-on, and the brightness is not 100%, set it to 100%
-			log.Printf("Turning always-on light %v back on", light.Configuration.Name)
+			log.Printf("Turning always-on light %v back on", configuration.Name)
 
-			b.domestia.TurnOn(configuration.Relay)
-			b.domestia.SetMaxBrightness(configuration.Relay)
+			if err := b.domestia.TurnOn(configuration.Relay); err != nil {
+				log.Errorf("Failed to turn on always-on light %v: %v", configuration.Name, err)
+			}
+			if err := b.domestia.SetMaxBrightness(configuration.Relay); err != nil {
+				log.Errorf("Failed to set always-on light %v to max brightness: %v", configuration.Name, err)
+			}
 
 			shouldPublishUpdate = false
 		} else if !configuration.Dimmable && !light.IsMinBrightness() && !light.IsMaxBrightness() {
 			// If the light is not dimmable and on it should always be set to 100%
 			log.Printf("Non-dimmable light %v at brightness %v, resetting", configuration.Name, light.Brightness)
 
-			b.domestia.SetMaxBrightness(configuration.Relay)
+			if err := b.domestia.SetMaxBrightness(configuration.Relay); err != nil {
+				log.Errorf("Failed to reset non-dimmable light %v: %v", configuration.Name, err)
+			}
 
 			shouldPublishUpdate = false
 		} else {

@@ -18,6 +18,12 @@ const (
 	relayStateOn
 )
 
+// controllerPort is the TCP port the Domestia controller listens on.
+const controllerPort = 52001
+
+// maxBrightness is the highest brightness value the controller accepts.
+const maxBrightness uint8 = 63
+
 type Client struct {
 	mutex              *sync.Mutex
 	ipAddress          string
@@ -44,7 +50,7 @@ func NewClient(ipAddress string, lights []*config.Light) (*Client, error) {
 }
 
 func (d *Client) connect() error {
-	connectURL := fmt.Sprintf("%v:%v", d.ipAddress, 52001)
+	connectURL := fmt.Sprintf("%v:%v", d.ipAddress, controllerPort)
 
 	if conn, err := net.Dial("tcp", connectURL); err != nil {
 		return err
@@ -66,7 +72,8 @@ func (d *Client) GetState() ([]*Light, error) {
 
 	var lights []*Light
 
-	if response[0] != 0xff {
+	// Response layout: 0xff header, two status bytes, then one byte per relay.
+	if len(response) < 4 || response[0] != 0xff {
 		return lights, nil
 	}
 
@@ -126,7 +133,7 @@ func (d *Client) SetBrightness(relay uint8, brightness uint8) error {
 
 // SetMaxBrightness sets given relay index to maximum brightness.
 func (d *Client) SetMaxBrightness(relay uint8) error {
-	return d.SetBrightness(relay, 63)
+	return d.SetBrightness(relay, maxBrightness)
 }
 
 func (d *Client) send(command []byte) ([]byte, error) {
@@ -148,9 +155,11 @@ func (d *Client) send(command []byte) ([]byte, error) {
 		return nil, err
 	} else if n == 0 {
 		return nil, errors.New("read 0 bytes")
+	} else {
+		// Return only the bytes actually read; the remaining buffer is zero
+		// padding that would otherwise break response comparisons (e.g. "OK").
+		return response[:n], nil
 	}
-
-	return response, nil
 }
 
 // packCommand packs a command into a controller message
