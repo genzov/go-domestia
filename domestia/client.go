@@ -143,7 +143,8 @@ func (d *Client) send(command []byte) ([]byte, error) {
 	if err := d.connect(); err != nil {
 		return nil, err
 	}
-	defer d.conn.Close()
+	// Throwaway per-request connection; a close error here is not actionable.
+	defer func() { _ = d.conn.Close() }()
 
 	packed := packCommand(command)
 

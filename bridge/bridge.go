@@ -248,7 +248,7 @@ func (b *Bridge) publishLightState() error {
 		}
 
 		if shouldPublishUpdate {
-			log.Printf("%v changed state", configuration.Name)
+			log.Printf("%v is now %v", configuration.Name, describeLightState(light))
 
 			stateTopic := configuration.HomeAssistant().StateTopic
 			if stateJson, err := homeAssistantStateJSON(light); err != nil {

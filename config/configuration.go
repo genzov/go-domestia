@@ -29,7 +29,11 @@ func LoadConfiguration(filename string) (*Configuration, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			log.Warnf("Failed to close config file %q: %v", filename, cerr)
+		}
+	}()
 
 	decoder := json.NewDecoder(file)
 	configuration := &Configuration{

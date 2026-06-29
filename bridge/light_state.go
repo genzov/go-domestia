@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 
 	"github.com/genzov/go-domestia/domestia"
@@ -14,6 +15,20 @@ const (
 	// maxHomeAssistantBrightness is the highest brightness Home Assistant uses (0-255).
 	maxHomeAssistantBrightness = 255
 )
+
+// describeLightState returns a human-readable description of a light's state
+// for logging, e.g. "off", "on" (non-dimmable) or "on at 75% (brightness 47/63)".
+func describeLightState(l *domestia.Light) string {
+	if l.Brightness == 0 {
+		return "off"
+	}
+	if !l.Configuration.Dimmable {
+		return "on"
+	}
+
+	percent := int(math.Round(float64(l.Brightness) / maxDomestiaBrightness * 100))
+	return fmt.Sprintf("on at %d%% (brightness %d/%d)", percent, l.Brightness, maxDomestiaBrightness)
+}
 
 func homeAssistantStateJSON(l *domestia.Light) (string, error) {
 	state := &homeassistant.LightState{
