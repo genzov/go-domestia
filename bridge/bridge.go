@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -41,8 +42,8 @@ func New(cfg *config.Configuration) (*Bridge, error) {
 }
 
 // Run runs the bridge, blocking. If this function returns an error it can be restarted.
-// If it returns nil, it was cleanly shut down.
-func (b *Bridge) Run() error {
+// If it returns nil (because ctx was cancelled), it was cleanly shut down.
+func (b *Bridge) Run(ctx context.Context) error {
 	mqttClient, err := b.connectMQTT()
 	if err != nil {
 		return err
@@ -55,10 +56,17 @@ func (b *Bridge) Run() error {
 	b.mqtt = mqttClient
 
 	ticker := time.NewTicker(time.Duration(b.configuration.RefreshFrequency) * time.Millisecond)
+	defer ticker.Stop()
 
 	// Loop to poll controller and publish state updates
 	for {
 		select {
+		case <-ctx.Done():
+			// Clean shutdown: tell Home Assistant the lights are unavailable.
+			// A graceful Disconnect suppresses the Last Will, so we publish it
+			// ourselves before tearing the connection down.
+			b.publishAvailability(mqttClient, false)
+			return nil
 		case <-ticker.C:
 		case <-b.updateChannel:
 		}
@@ -72,6 +80,9 @@ func (b *Bridge) Run() error {
 // connectMQTT creates and connects MQTT client
 func (b *Bridge) connectMQTT() (mqtt.Client, error) {
 	opts := b.configuration.MQTT.ClientOptions()
+	// Last Will: if the bridge disconnects ungracefully, the broker publishes
+	// "offline" so Home Assistant marks the lights unavailable.
+	opts.SetWill(homeassistant.AvailabilityTopic, homeassistant.PayloadNotAvailable, 0, true)
 	// Configure MQTT subscriptions in the ConnectHandler to make sure they are set up after reconnect
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		// Log rather than exit: this runs on the MQTT client's goroutine, and
@@ -79,7 +90,10 @@ func (b *Bridge) connectMQTT() (mqtt.Client, error) {
 		// restart-on-error loop in main. The handler fires again on reconnect.
 		if err := b.setupLights(client); err != nil {
 			log.Errorf("Failed to register with MQTT: %v", err)
+			return
 		}
+		// Lights are registered; announce that the bridge is online.
+		b.publishAvailability(client, true)
 	})
 
 	mqttClient := mqtt.NewClient(opts)
@@ -88,6 +102,19 @@ func (b *Bridge) connectMQTT() (mqtt.Client, error) {
 	}
 
 	return mqttClient, nil
+}
+
+// publishAvailability publishes the bridge's availability (retained) so Home
+// Assistant knows whether the lights are reachable.
+func (b *Bridge) publishAvailability(client mqtt.Client, available bool) {
+	payload := homeassistant.PayloadNotAvailable
+	if available {
+		payload = homeassistant.PayloadAvailable
+	}
+
+	if t := client.Publish(homeassistant.AvailabilityTopic, 0, true, payload); t.Wait() && t.Error() != nil {
+		log.Errorf("Failed to publish availability %q: %v", payload, t.Error())
+	}
 }
 
 // setupLights publishes Home Assistant configuration and subscribes to state updates

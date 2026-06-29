@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -9,8 +12,6 @@ import (
 	"github.com/genzov/go-domestia/bridge"
 	"github.com/genzov/go-domestia/config"
 )
-
-// TODO mark everything as unavailable on shutdown
 
 func main() {
 	// Config path is overridable via CONFIG_PATH (e.g. /data/options.json when
@@ -32,14 +33,29 @@ func main() {
 		log.Fatalf("Failed to set up bridge: %v", err)
 	}
 
+	// Cancel the context on SIGINT/SIGTERM so the bridge can shut down cleanly
+	// (marking lights unavailable) instead of being killed mid-flight.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	for {
-		if err := b.Run(); err != nil {
-			log.Errorf("Bridge returned: %v, restarting", err)
-		} else {
-			log.Print("Shutting down")
+		if err := b.Run(ctx); err == nil {
+			// Run only returns nil when the context was cancelled.
 			break
+		} else {
+			log.Errorf("Bridge returned: %v, restarting", err)
 		}
 
-		time.Sleep(time.Second)
+		// Back off before restarting, but bail out immediately if we're shutting down.
+		select {
+		case <-ctx.Done():
+			break
+		case <-time.After(time.Second):
+		}
+		if ctx.Err() != nil {
+			break
+		}
 	}
+
+	log.Print("Shutting down")
 }
