@@ -172,7 +172,7 @@ them against the `schema:` block, and writes the result to `/data/options.json`
    Repositories**.
 2. Install the **Domestia Bridge** add-on.
 3. Configure it in the add-on **Configuration** tab — see
-   [`config.sample.yaml`](config.sample.yaml) for a fully worked-out example of
+   [`config.sample.yaml`](go_domestia/config.sample.yaml) for a fully worked-out example of
    the available options.
 4. Start the add-on. Your lights appear automatically in Home Assistant.
 
