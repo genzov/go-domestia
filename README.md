@@ -122,7 +122,7 @@ so you can build for the controller's target platform:
 ```sh
 docker buildx build \
   --platform linux/aarch64 \
-  -t ghcr.io/<your-user>/go-domestia-aarch64 \
+  -t ghcr.io/genzov/go-domestia-aarch64:<version> \
   --push .
 ```
 
