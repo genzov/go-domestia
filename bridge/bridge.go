@@ -160,7 +160,15 @@ func (b *Bridge) lightSubscriptionCallback(light *config.Light) func(mqttClient 
 					log.Errorf("Failed to set %v to max brightness: %v", light.Name, err)
 				}
 			} else if cmd.Brightness != 0 {
-				if err := b.domestia.SetBrightness(relay, domestiaBrightness(cmd)); err != nil {
+				brightness := domestiaBrightness(cmd)
+				// A non-zero Home Assistant brightness must not round down to 0,
+				// which would switch the light off instead of dimming it to its
+				// lowest level. Floor it to the controller's minimum on level.
+				if brightness == 0 {
+					brightness = 1
+				}
+
+				if err := b.domestia.SetBrightness(relay, brightness); err != nil {
 					log.Errorf("Failed to set brightness of %v: %v", light.Name, err)
 				}
 			}
