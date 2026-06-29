@@ -25,7 +25,7 @@ options:
     username: "username"
     password: "password"
   lights:
-    # relay  : the controller relay number this light is wired to.
+    # relay: the controller relay number this light is wired to.
     # dimmable: true for dimmable channels (default false).
     # always_on: keep the relay forced on at 100% (default false).
     - name: Garden
