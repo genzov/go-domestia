@@ -53,7 +53,7 @@ Assistant cannot talk to directly. This bridge sits between the two:
 - **Go** (see `go.mod` for the exact version)
 - [`eclipse/paho.mqtt.golang`](https://github.com/eclipse/paho.mqtt.golang) — MQTT client
 - [`sirupsen/logrus`](https://github.com/sirupsen/logrus) — structured logging
-- **Docker** (multi-arch: `armv7`, `aarch64`, `amd64`) for distribution
+- **Docker** (`aarch64`) for distribution
 - Packaged as a **Home Assistant add-on** (`config.yaml`)
 
 You will also need:
@@ -121,8 +121,8 @@ so you can build for the controller's target platform:
 
 ```sh
 docker buildx build \
-  --platform linux/amd64,linux/arm64,linux/arm/v7 \
-  -t ghcr.io/<your-user>/go-domestia \
+  --platform linux/aarch64 \
+  -t ghcr.io/<your-user>/go-domestia-aarch64 \
   --push .
 ```
 
