@@ -163,7 +163,7 @@ unavailable in Home Assistant before exiting.
 
 ### As a Home Assistant add-on
 
-This repository is also a Home Assistant add-on. [`config.yaml`](config.yaml) is
+This repository is also a Home Assistant add-on repository. [`go_domestia/config.yaml`](go_domestia/config.yaml) is
 the add-on manifest; Home Assistant renders its options in the UI, validates
 them against the `schema:` block, and writes the result to `/data/options.json`
 (which the image reads via `CONFIG_PATH`).
