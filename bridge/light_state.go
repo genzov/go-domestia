@@ -2,9 +2,17 @@ package bridge
 
 import (
 	"encoding/json"
+	"math"
 
 	"github.com/genzov/go-domestia/domestia"
 	"github.com/genzov/go-domestia/homeassistant"
+)
+
+const (
+	// maxDomestiaBrightness is the highest brightness the Domestia controller accepts (0-63).
+	maxDomestiaBrightness = 63
+	// maxHomeAssistantBrightness is the highest brightness Home Assistant uses (0-255).
+	maxHomeAssistantBrightness = 255
 )
 
 func homeAssistantStateJSON(l *domestia.Light) (string, error) {
@@ -25,12 +33,29 @@ func homeAssistantStateJSON(l *domestia.Light) (string, error) {
 	}
 }
 
-// homeAssistantBrightness converts the brightness in domestia.Light to brightness as published over MQTT
+// homeAssistantBrightness converts a Domestia brightness (0-63) to the 0-255 scale
+// published over MQTT, rounding to the nearest value rather than truncating.
 func homeAssistantBrightness(l *domestia.Light) int {
-	return int(float32(l.Brightness) * (255.0 / 63.0))
+	scaled := math.Round(float64(l.Brightness) * (maxHomeAssistantBrightness / float64(maxDomestiaBrightness)))
+	if scaled > maxHomeAssistantBrightness {
+		scaled = maxHomeAssistantBrightness
+	}
+
+	return int(scaled)
 }
 
-// domestiaBrightness returns brightness converted to Domestia controller
+// domestiaBrightness converts a Home Assistant brightness (0-255) to the Domestia
+// controller's 0-63 scale, rounding to the nearest value rather than truncating.
+// Truncation made low brightness values (1-4) collapse to 0, switching the light
+// off instead of dimming it. The result is clamped to the controller's valid range.
 func domestiaBrightness(l *homeassistant.LightState) uint8 {
-	return uint8(float32(l.Brightness) * (63.0 / 255.0))
+	scaled := math.Round(float64(l.Brightness) * (float64(maxDomestiaBrightness) / maxHomeAssistantBrightness))
+	if scaled > maxDomestiaBrightness {
+		scaled = maxDomestiaBrightness
+	}
+	if scaled < 0 {
+		scaled = 0
+	}
+
+	return uint8(scaled)
 }
