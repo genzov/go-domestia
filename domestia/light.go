@@ -10,8 +10,10 @@ type Light struct {
 
 // NewLight creates a new Light struct from given configuration and brightness.
 func NewLight(cfg *config.Light, brightness uint8) *Light {
-	// If brightness is exactly 1, the relay is not dimmable and on.
-	if brightness == 1 {
+	// A non-dimmable relay reports brightness 1 when it is on; normalise that
+	// to full brightness. Dimmable relays use 1 as a legitimate lowest dim
+	// level (~2%), so their values must be left untouched.
+	if brightness == 1 && !cfg.Dimmable {
 		brightness = maxBrightness
 	}
 
