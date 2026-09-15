@@ -5,6 +5,8 @@
 - New optional `model` option to set the controller model (`DMC-012-003` or
   `DMC-008-001`). It is shown as the model of each light's device in Home
   Assistant and is informational only.
+- Images are now published for `armv7` and `amd64` as well as `aarch64`, so the
+  add-on can be installed on 32-bit ARM boards and x86-64 machines too.
 
 ## 1.2.2
 

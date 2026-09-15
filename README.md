@@ -54,7 +54,7 @@ Assistant cannot talk to directly. This bridge sits between the two:
 - **Go** (see `go.mod` for the exact version)
 - [`eclipse/paho.mqtt.golang`](https://github.com/eclipse/paho.mqtt.golang) — MQTT client
 - [`sirupsen/logrus`](https://github.com/sirupsen/logrus) — structured logging
-- **Docker** (`aarch64`) for distribution
+- **Docker** (`aarch64`, `armv7`, `amd64`) for distribution
 - Packaged as a **Home Assistant add-on** (`config.yaml`)
 
 You will also need:
@@ -122,13 +122,20 @@ device's software version.
 ### Multi-architecture (using Buildx)
 
 The build honours the `TARGETARCH` / `TARGETVARIANT` arguments that Buildx sets,
-so you can build for the controller's target platform:
+so it cross-compiles for any platform without emulation. Home Assistant pulls a
+separate image per add-on architecture, named `go-domestia-<arch>`:
+
+| Add-on arch | Buildx platform |
+| ----------- | --------------- |
+| `aarch64`   | `linux/arm64`   |
+| `armv7`     | `linux/arm/v7`  |
+| `amd64`     | `linux/amd64`   |
 
 ```sh
 docker buildx build \
-  --platform linux/aarch64 \
+  --platform linux/arm/v7 \
   --build-arg VERSION=<version> \
-  -t ghcr.io/genzov/go-domestia-aarch64:<version> \
+  -t ghcr.io/genzov/go-domestia-armv7:<version> \
   --push .
 ```
 
@@ -146,9 +153,10 @@ release:
    [`config.sample.yaml`](go_domestia/config.sample.yaml).
 3. Merge to `main`.
 
-The workflow runs the tests, pushes `ghcr.io/genzov/go-domestia-aarch64:<version>`
-and `:latest`, and publishes a GitHub release tagged `<version>` with the
-changelog section as its notes. Versions that are already tagged are skipped, and
+The workflow runs the tests, pushes `ghcr.io/genzov/go-domestia-<arch>:<version>`
+and `:latest` for each architecture, and publishes a GitHub release tagged
+`<version>` with the changelog section as its notes
+([`release-notes.sh`](.github/scripts/release-notes.sh)). Versions that are already tagged are skipped, and
 a failed release can be rerun from the **Actions** tab.
 
 Home Assistant reads the add-on version from `main`, so it can offer the update

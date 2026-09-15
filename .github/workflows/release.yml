@@ -1,9 +1,10 @@
 name: Release
 
 # Releases whenever the add-on version in go_domestia/config.yaml changes on
-# main: pushes the image, then tags and publishes a GitHub release with the
-# matching CHANGELOG section. Home Assistant reads config.yaml from main, so it
-# can offer the update a few minutes before the image is available.
+# main: pushes an image per architecture, then tags and publishes a GitHub
+# release with the matching CHANGELOG section. Home Assistant reads config.yaml
+# from main, so it can offer the update a few minutes before the images are
+# available.
 
 on:
   push:
@@ -19,11 +20,9 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/go-domestia-aarch64
-
 jobs:
-  check:
+  # Everything that can stop a release runs here, before any image is pushed
+  prepare:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -56,62 +55,43 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-  release:
-    needs: check
-    if: needs.check.outputs.exists == 'false'
-    runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ needs.check.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      # Before pushing anything, so a missing changelog entry stops the release.
-      # Wrapped lines are joined, as GitHub renders single newlines as breaks.
-      - name: Prepare release notes
-        run: |
-          awk -v heading="## $VERSION" '
-            function flush() {
-              if (buf == "") return
-              if (blank) print ""
-              print buf
-              printed = 1; blank = 0; buf = ""
-            }
-            $0 == heading { found = 1; print; printed = 1; blank = 1; next }
-            !found { next }
-            /^## / { exit }
-            /^[[:space:]]*$/ { flush(); if (printed) blank = 1; next }
-            /^- / { flush(); buf = $0; next }
-            {
-              line = $0
-              sub(/^[[:space:]]+/, "", line)
-              buf = (buf == "") ? line : buf " " line
-            }
-            END { flush() }
-          ' go_domestia/CHANGELOG.md > notes.md
-
-          # Only the heading, or nothing at all, means there is no entry
-          if [ "$(grep -c . notes.md)" -le 1 ]; then
-            echo "::error::No '## $VERSION' section in go_domestia/CHANGELOG.md"
-            exit 1
-          fi
-
-          previous=$(git describe --tags --abbrev=0 2>/dev/null || true)
-          if [ -n "$previous" ]; then
-            printf '\n**Full Changelog**: %s/%s/compare/%s...%s\n' \
-              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$previous" "$VERSION" >> notes.md
-          fi
-
-          cat notes.md
+      - name: Check release notes
+        if: steps.version.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash .github/scripts/release-notes.sh "$VERSION"
 
       - uses: actions/setup-go@v7
+        if: steps.version.outputs.exists == 'false'
         with:
           go-version-file: go.mod
 
-      - run: go vet ./...
+      - if: steps.version.outputs.exists == 'false'
+        run: go vet ./...
 
-      - run: go test ./...
+      - if: steps.version.outputs.exists == 'false'
+        run: go test ./...
+
+  # Home Assistant pulls ghcr.io/<owner>/go-domestia-{arch}, one image per
+  # architecture listed in go_domestia/config.yaml
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.exists == 'false'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: aarch64
+            platform: linux/arm64
+          - arch: armv7
+            platform: linux/arm/v7
+          - arch: amd64
+            platform: linux/amd64
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/go-domestia-${{ matrix.arch }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v4
 
@@ -125,17 +105,28 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/arm64
+          platforms: ${{ matrix.platform }}
           build-args: VERSION=${{ env.VERSION }}
           tags: |
             ${{ env.IMAGE }}:${{ env.VERSION }}
             ${{ env.IMAGE }}:latest
           push: true
 
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          bash .github/scripts/release-notes.sh "$VERSION" > notes.md
           gh release create "$VERSION" \
             --target "$GITHUB_SHA" \
             --title "$VERSION" \
