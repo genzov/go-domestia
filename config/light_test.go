@@ -8,7 +8,7 @@ import (
 func TestHomeAssistantRegistrationJSONRegistersDevice(t *testing.T) {
 	light := &Light{Name: "Living room", Relay: 13, Dimmable: true}
 
-	payload, err := light.HomeAssistantRegistrationJSON("1.2.0")
+	payload, err := light.HomeAssistantRegistrationJSON("DMC-012-003", "1.2.0")
 	if err != nil {
 		t.Fatalf("HomeAssistantRegistrationJSON() error = %v", err)
 	}
@@ -38,13 +38,16 @@ func TestHomeAssistantRegistrationJSONRegistersDevice(t *testing.T) {
 	if gotDevice["name"] != "Living room" {
 		t.Errorf("device.name = %v, want Living room", gotDevice["name"])
 	}
+	if gotDevice["model"] != "DMC-012-003" {
+		t.Errorf("device.model = %v, want DMC-012-003", gotDevice["model"])
+	}
 	if gotDevice["sw_version"] != "1.2.0" {
 		t.Errorf("device.sw_version = %v, want 1.2.0", gotDevice["sw_version"])
 	}
 }
 
-func TestHomeAssistantRegistrationJSONOmitsEmptyVersion(t *testing.T) {
-	payload, err := (&Light{Name: "Garden", Relay: 2}).HomeAssistantRegistrationJSON("")
+func TestHomeAssistantRegistrationJSONOmitsEmptyModelAndVersion(t *testing.T) {
+	payload, err := (&Light{Name: "Garden", Relay: 2}).HomeAssistantRegistrationJSON("", "")
 	if err != nil {
 		t.Fatalf("HomeAssistantRegistrationJSON() error = %v", err)
 	}
@@ -55,7 +58,9 @@ func TestHomeAssistantRegistrationJSONOmitsEmptyVersion(t *testing.T) {
 	if err := json.Unmarshal([]byte(payload), &got); err != nil {
 		t.Fatalf("payload is not valid JSON: %v", err)
 	}
-	if _, present := got.Device["sw_version"]; present {
-		t.Errorf("sw_version should be omitted when empty, got %v", got.Device["sw_version"])
+	for _, key := range []string{"model", "sw_version"} {
+		if _, present := got.Device[key]; present {
+			t.Errorf("%v should be omitted when empty, got %v", key, got.Device[key])
+		}
 	}
 }

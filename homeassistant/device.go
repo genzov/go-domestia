@@ -6,14 +6,16 @@ type Device struct {
 	Identifiers  []string `json:"identifiers"`
 	Name         string   `json:"name"`
 	Manufacturer string   `json:"manufacturer"`
+	Model        string   `json:"model,omitempty"`
 	SwVersion    string   `json:"sw_version,omitempty"`
 }
 
-func NewDevice(id string, name string, swVersion string) *Device {
+func NewDevice(id string, name string, model string, swVersion string) *Device {
 	return &Device{
 		Identifiers:  []string{id},
 		Name:         name,
 		Manufacturer: "Domestia",
+		Model:        model,
 		SwVersion:    swVersion,
 	}
 }

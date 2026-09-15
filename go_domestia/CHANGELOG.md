@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+- New optional `model` option to set the controller model (`DMC-012-003` or
+  `DMC-008-001`). It is shown as the model of each light's device in Home
+  Assistant and is informational only.
+
 ## 1.2.2
 
 - Retained discovery configs left behind by renaming a light are removed on

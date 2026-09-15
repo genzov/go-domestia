@@ -21,9 +21,10 @@ func (l *Light) HomeAssistant() *homeassistant.LightConfiguration {
 // HomeAssistantRegistrationJSON returns the discovery payload for this light,
 // registering it as its own device. The device identifier is derived from the
 // relay, like the entity's unique_id, so it stays stable across restarts.
-func (l *Light) HomeAssistantRegistrationJSON(swVersion string) (string, error) {
+// The controller model is reported on the device when set.
+func (l *Light) HomeAssistantRegistrationJSON(model string, swVersion string) (string, error) {
 	config := l.HomeAssistant()
-	config.Device = homeassistant.NewDevice(fmt.Sprintf("domestia_relay_%v", l.Relay), l.Name, swVersion)
+	config.Device = homeassistant.NewDevice(fmt.Sprintf("domestia_relay_%v", l.Relay), l.Name, model, swVersion)
 
 	if configMarshalled, err := json.Marshal(config); err != nil {
 		return "", err

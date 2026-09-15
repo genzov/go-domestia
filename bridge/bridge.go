@@ -337,7 +337,7 @@ func (b *Bridge) lightSubscriptionCallback(light *config.Light) func(mqttClient 
 // registerLight registers a light with Home Assistant
 func (b *Bridge) registerLight(mqttClient mqtt.Client, l *config.Light) error {
 	configTopic := l.HomeAssistant().ConfigTopic
-	if configJson, err := l.HomeAssistantRegistrationJSON(b.version); err != nil {
+	if configJson, err := l.HomeAssistantRegistrationJSON(b.configuration.Model, b.version); err != nil {
 		return fmt.Errorf("error marshalling light configuration: %v", err)
 	} else if t := mqttClient.Publish(configTopic, 0, true, configJson); t.Wait() && t.Error() != nil {
 		return fmt.Errorf("MQTT publish failed: %v", t.Error())

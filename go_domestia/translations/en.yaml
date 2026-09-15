@@ -2,6 +2,11 @@ configuration:
   ip_address:
     name: Controller IP address
     description: IP address of the Domestia controller on your network.
+  model:
+    name: Controller model
+    description: >-
+      Model of your Domestia controller, shown on each light's device in Home
+      Assistant. Optional and purely informational.
   refresh_frequency:
     name: Refresh frequency (ms)
     description: >-

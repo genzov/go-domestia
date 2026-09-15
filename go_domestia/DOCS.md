@@ -15,6 +15,7 @@ required.
 | Option              | Required | Description                                                       |
 | ------------------- | -------- | ----------------------------------------------------------------- |
 | `ip_address`        | yes      | IP address of the Domestia controller.                            |
+| `model`             | no       | `DMC-012-003` or `DMC-008-001`, shown on each device in HA.       |
 | `refresh_frequency` | no       | Controller poll interval in ms (default `2000`, must be > 0).     |
 | `mqtt.ip_address`   | yes      | Hostname/IP of the MQTT broker (port `1883`).                     |
 | `mqtt.username`     | no       | MQTT username.                                                    |
@@ -28,6 +29,7 @@ required.
 
 ```yaml
 ip_address: "192.168.1.2"
+model: "DMC-012-003"
 refresh_frequency: 2000
 mqtt:
   ip_address: core-mosquitto
