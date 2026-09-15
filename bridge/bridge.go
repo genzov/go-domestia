@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,6 +41,17 @@ type Bridge struct {
 // before the lights are marked unavailable in Home Assistant.
 const maxControllerFailures = 3
 
+// discoveryConfigTopics matches the Home Assistant discovery configs of all lights.
+const discoveryConfigTopics = "homeassistant/light/+/config"
+
+// orphanCollectWindow is how long to collect retained discovery configs when
+// looking for orphans; the broker sends them right after subscribing.
+const orphanCollectWindow = 2 * time.Second
+
+// lightTopicPrefix prefixes the command and state topics of the bridge's lights,
+// used to recognise discovery configs published by the bridge.
+const lightTopicPrefix = "domestia/light/"
+
 // New creates a bridge. version is reported to Home Assistant as the device's
 // software version.
 func New(cfg *config.Configuration, version string) (*Bridge, error) {
@@ -70,6 +84,8 @@ func (b *Bridge) Run(ctx context.Context) error {
 	}()
 
 	b.mqtt = mqttClient
+
+	b.removeOrphanedConfigs(ctx, mqttClient)
 
 	ticker := time.NewTicker(time.Duration(b.configuration.RefreshFrequency) * time.Millisecond)
 	defer ticker.Stop()
@@ -154,6 +170,84 @@ func (b *Bridge) connectMQTT() (mqtt.Client, error) {
 	}
 
 	return mqttClient, nil
+}
+
+// removeOrphanedConfigs clears retained discovery configs left behind when a
+// light was renamed (config topics derive from the name). Such an orphan shares
+// the light's unique_id, so Home Assistant may keep the stale entity and ignore
+// updates to the current one.
+func (b *Bridge) removeOrphanedConfigs(ctx context.Context, client mqtt.Client) {
+	var mutex sync.Mutex
+	retained := make(map[string][]byte)
+
+	if t := client.Subscribe(discoveryConfigTopics, 0, func(_ mqtt.Client, msg mqtt.Message) {
+		mutex.Lock()
+		defer mutex.Unlock()
+		retained[msg.Topic()] = msg.Payload()
+	}); t.Wait() && t.Error() != nil {
+		log.Warnf("Failed to look for orphaned discovery configs: %v", t.Error())
+		return
+	}
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(orphanCollectWindow):
+	}
+
+	if t := client.Unsubscribe(discoveryConfigTopics); t.Wait() && t.Error() != nil {
+		log.Warnf("Failed to unsubscribe from discovery configs: %v", t.Error())
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	for _, topic := range orphanedTopics(retained, b.configuration.Lights) {
+		log.Printf("Removing orphaned retained message on %v", topic)
+		if t := client.Publish(topic, 0, true, ""); t.Wait() && t.Error() != nil {
+			log.Warnf("Failed to remove orphaned retained message on %v: %v", topic, t.Error())
+		}
+	}
+}
+
+// orphanedTopics returns, sorted, the retained topics to clear: discovery configs
+// published by the bridge that carry a configured light's unique_id under a topic
+// other than that light's current config topic, plus the stale state topics they
+// reference.
+func orphanedTopics(retained map[string][]byte, lights []*config.Light) []string {
+	currentByUniqueId := make(map[string]*homeassistant.LightConfiguration)
+	currentStateTopics := make(map[string]bool)
+	for _, light := range lights {
+		current := light.HomeAssistant()
+		currentByUniqueId[current.UniqueId] = current
+		currentStateTopics[current.StateTopic] = true
+	}
+
+	var orphans []string
+	for topic, payload := range retained {
+		var discovered homeassistant.LightConfiguration
+		if len(payload) == 0 || json.Unmarshal(payload, &discovered) != nil {
+			continue
+		}
+
+		// Only touch configs the bridge published itself
+		if !strings.HasPrefix(discovered.CommandTopic, lightTopicPrefix) {
+			continue
+		}
+
+		current, ours := currentByUniqueId[discovered.UniqueId]
+		if !ours || topic == current.ConfigTopic {
+			continue
+		}
+
+		orphans = append(orphans, topic)
+		if strings.HasPrefix(discovered.StateTopic, lightTopicPrefix) && !currentStateTopics[discovered.StateTopic] {
+			orphans = append(orphans, discovered.StateTopic)
+		}
+	}
+
+	sort.Strings(orphans)
+
+	return orphans
 }
 
 // publishAvailability publishes the bridge's availability (retained) so Home

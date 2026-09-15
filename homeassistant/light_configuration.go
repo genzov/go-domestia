@@ -19,7 +19,7 @@ const (
 
 // LightConfiguration represents a Home Assistant light, as used during light registration
 type LightConfiguration struct {
-	ConfigTopic string
+	ConfigTopic string `json:"-"` // Topic the configuration is published on, not part of the payload
 
 	Name              *string `json:"name"` // Always null, so Home Assistant names the entity after its device
 	UniqueId          string  `json:"unique_id"`

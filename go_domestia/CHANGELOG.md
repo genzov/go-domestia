@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.2
+
+- Retained discovery configs left behind by renaming a light are removed on
+  startup. They shared the light's unique ID, which could keep a stale entity
+  around and stop the current one from being updated.
+- The internal config topic is no longer included in the discovery payload.
+
+After updating, restart Home Assistant once so existing light entities are
+attached to their devices.
+
 ## 1.2.1
 
 - A slow or unreachable controller no longer restarts the bridge (which
