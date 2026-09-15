@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.1
+
+- A slow or unreachable controller no longer restarts the bridge (which
+  reconnected MQTT and re-registered every light). Failed polls are retried,
+  and lights are marked unavailable after 3 consecutive failures until the
+  controller responds again.
+- Controller requests now time out after 3 seconds (was 1 second, with no
+  connect timeout).
+
 ## 1.2.0
 
 - Each light is registered as its own Home Assistant device, named after the

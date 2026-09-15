@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -25,7 +26,17 @@ type Bridge struct {
 	updateChannel chan bool
 	// Map to store current brightnesses of lights, used to publish only on changes to state
 	relayToBrightness map[uint8]uint8
+
+	// Number of consecutive failed controller polls
+	controllerFailures int
+	// Whether the controller is considered reachable; read from the MQTT
+	// connect handler goroutine, so it is atomic.
+	controllerUnavailable atomic.Bool
 }
+
+// maxControllerFailures is how many consecutive controller polls may fail
+// before the lights are marked unavailable in Home Assistant.
+const maxControllerFailures = 3
 
 // New creates a bridge. version is reported to Home Assistant as the device's
 // software version.
@@ -76,9 +87,44 @@ func (b *Bridge) Run(ctx context.Context) error {
 		case <-b.updateChannel:
 		}
 
-		if err := b.publishLightState(); err != nil {
+		// Controller errors are transient (every request uses a fresh
+		// connection), so restarting the bridge would not help and would only
+		// cause needless MQTT reconnects and re-registration. Retry on the next
+		// tick instead.
+		domestiaState, err := b.domestia.GetState()
+		if err != nil {
+			b.handleControllerFailure(mqttClient, err)
+			continue
+		}
+		b.handleControllerSuccess(mqttClient)
+
+		if err := b.publishLightState(domestiaState); err != nil {
 			return err
 		}
+	}
+}
+
+// handleControllerFailure records a failed poll and marks the lights
+// unavailable once the controller has failed repeatedly.
+func (b *Bridge) handleControllerFailure(client mqtt.Client, err error) {
+	b.controllerFailures++
+
+	if b.controllerFailures < maxControllerFailures {
+		log.Warnf("Failed to fetch controller state (attempt %v): %v", b.controllerFailures, err)
+	} else if !b.controllerUnavailable.Swap(true) {
+		log.Errorf("Failed to fetch controller state %v times, marking lights unavailable: %v", b.controllerFailures, err)
+		b.publishAvailability(client, false)
+	}
+}
+
+// handleControllerSuccess resets the failure count and marks the lights
+// available again if they had been marked unavailable.
+func (b *Bridge) handleControllerSuccess(client mqtt.Client) {
+	b.controllerFailures = 0
+
+	if b.controllerUnavailable.Swap(false) {
+		log.Print("Controller reachable again, marking lights available")
+		b.publishAvailability(client, true)
 	}
 }
 
@@ -97,8 +143,9 @@ func (b *Bridge) connectMQTT() (mqtt.Client, error) {
 			log.Errorf("Failed to register with MQTT: %v", err)
 			return
 		}
-		// Lights are registered; announce that the bridge is online.
-		b.publishAvailability(client, true)
+		// Lights are registered; announce that the bridge is online, unless the
+		// controller is currently unreachable.
+		b.publishAvailability(client, !b.controllerUnavailable.Load())
 	})
 
 	mqttClient := mqtt.NewClient(opts)
@@ -207,16 +254,10 @@ func (b *Bridge) registerLight(mqttClient mqtt.Client, l *config.Light) error {
 	return nil
 }
 
-// Fetches current state of the controller and publishes updates to mqtt.
+// Publishes updates of the given controller state to mqtt.
 // Also makes sure always-on lights are in fact always on. Also makes sure
 // that non-dimmable lights are not dimmed.
-func (b *Bridge) publishLightState() error {
-	domestiaState, err := b.domestia.GetState()
-
-	if err != nil {
-		return err
-	}
-
+func (b *Bridge) publishLightState(domestiaState []*domestia.Light) error {
 	for _, light := range domestiaState {
 		configuration := light.Configuration
 

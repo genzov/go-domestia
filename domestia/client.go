@@ -21,6 +21,11 @@ const (
 // controllerPort is the TCP port the Domestia controller listens on.
 const controllerPort = 52001
 
+// requestTimeout bounds connecting to the controller and the full
+// request/response exchange. The controller occasionally takes over a second to
+// answer, so this is deliberately generous.
+const requestTimeout = 3 * time.Second
+
 // maxBrightness is the highest brightness value the controller accepts and
 // reports (the dim scale runs 0-64; a relay turned fully on reads back as 64).
 const maxBrightness uint8 = 64
@@ -53,9 +58,10 @@ func NewClient(ipAddress string, lights []*config.Light) (*Client, error) {
 func (d *Client) connect() error {
 	connectURL := fmt.Sprintf("%v:%v", d.ipAddress, controllerPort)
 
-	if conn, err := net.Dial("tcp", connectURL); err != nil {
+	if conn, err := net.DialTimeout("tcp", connectURL, requestTimeout); err != nil {
 		return err
-	} else if err = conn.SetDeadline(time.Now().Add(time.Second)); err != nil {
+	} else if err = conn.SetDeadline(time.Now().Add(requestTimeout)); err != nil {
+		_ = conn.Close()
 		return err
 	} else {
 		d.conn = conn
