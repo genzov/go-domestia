@@ -1,6 +1,6 @@
 # go-domestia
 
-A bridge that connects a **Domestia** lighting controller (e.g. the DMC-008) to
+A bridge that connects a **Domestia** lighting controller (DMC-012-003 or DMC-008-001) to
 **Home Assistant** over MQTT. It exposes each relay on the controller as a Home
 Assistant light using [MQTT discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery),
 so your Domestia-controlled lights appear automatically in Home Assistant with
@@ -75,6 +75,7 @@ Copy [`domestia.sample.json`](domestia.sample.json) to `domestia.json` and edit 
 ```json
 {
   "ip_address": "192.168.1.2",
+  "model": "DMC-012-003",
   "refresh_frequency": 2000,
   "mqtt": {
     "ip_address": "192.168.1.1",
@@ -92,6 +93,7 @@ Copy [`domestia.sample.json`](domestia.sample.json) to `domestia.json` and edit 
 | Field               | Type     | Required | Description                                                            |
 | ------------------- | -------- | -------- | ---------------------------------------------------------------------- |
 | `ip_address`        | string   | yes      | IP address of the Domestia controller.                                 |
+| `model`             | string   | no       | Controller model, `DMC-012-003` or `DMC-008-001`. Shown on HA devices. |
 | `refresh_frequency` | int (ms) | no       | Controller poll interval. Defaults to `2000`. Must be greater than 0.  |
 | `mqtt.ip_address`   | string   | yes      | Hostname/IP of the MQTT broker (port `1883`).                          |
 | `mqtt.username`     | string   | no       | MQTT username.                                                         |
@@ -129,6 +131,28 @@ docker buildx build \
   -t ghcr.io/genzov/go-domestia-aarch64:<version> \
   --push .
 ```
+
+## CI and releases
+
+[`ci.yml`](.github/workflows/ci.yml) checks formatting, runs `go vet` and the
+tests, and builds the Docker image on every push to `main` and every pull
+request.
+
+Releases are published by [`release.yml`](.github/workflows/release.yml). To
+release:
+
+1. Add a `## <version>` section to [`CHANGELOG.md`](go_domestia/CHANGELOG.md).
+2. Bump `version` in [`config.yaml`](go_domestia/config.yaml) and
+   [`config.sample.yaml`](go_domestia/config.sample.yaml).
+3. Merge to `main`.
+
+The workflow runs the tests, pushes `ghcr.io/genzov/go-domestia-aarch64:<version>`
+and `:latest`, and publishes a GitHub release tagged `<version>` with the
+changelog section as its notes. Versions that are already tagged are skipped, and
+a failed release can be rerun from the **Actions** tab.
+
+Home Assistant reads the add-on version from `main`, so it can offer the update
+a few minutes before the image has been pushed.
 
 ## Running
 
@@ -189,3 +213,4 @@ them against the `schema:` block, and writes the result to `/data/options.json`
 | `domestia/`      | Domestia controller TCP client and protocol encoding.                 |
 | `homeassistant/` | Home Assistant MQTT discovery and state/command payload types.        |
 | `config/`        | Configuration loading and validation.                                 |
+| `.github/`       | CI and release workflows.                                             |

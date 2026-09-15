@@ -7,6 +7,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH GOARM=${TARGETVARIANT#v} \
     go build -ldflags "-X main.version=${VERSION}" -o /out/go-domestia
 
 FROM scratch
+# Links the published image to the repository, which lets release workflows push it
+LABEL org.opencontainers.image.source="https://github.com/genzov/go-domestia"
 ENV CONFIG_PATH=/data/options.json
 COPY --from=builder /out/go-domestia /go-domestia
 

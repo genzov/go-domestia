@@ -1,0 +1,143 @@
+name: Release
+
+# Releases whenever the add-on version in go_domestia/config.yaml changes on
+# main: pushes the image, then tags and publishes a GitHub release with the
+# matching CHANGELOG section. Home Assistant reads config.yaml from main, so it
+# can offer the update a few minutes before the image is available.
+
+on:
+  push:
+    branches: [main]
+    paths: [go_domestia/config.yaml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/go-domestia-aarch64
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      exists: ${{ steps.version.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        run: |
+          version=$(sed -n 's/^version: "\(.*\)"$/\1/p' go_domestia/config.yaml)
+          if [ -z "$version" ]; then
+            echo "::error::No version found in go_domestia/config.yaml"
+            exit 1
+          fi
+
+          sample=$(sed -n 's/^version: "\(.*\)"$/\1/p' go_domestia/config.sample.yaml)
+          if [ "$sample" != "$version" ]; then
+            echo "::error::config.sample.yaml has version $sample, config.yaml has $version"
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/$version" > /dev/null; then
+            echo "Release $version already exists, nothing to do"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: check
+    if: needs.check.outputs.exists == 'false'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Before pushing anything, so a missing changelog entry stops the release.
+      # Wrapped lines are joined, as GitHub renders single newlines as breaks.
+      - name: Prepare release notes
+        run: |
+          awk -v heading="## $VERSION" '
+            function flush() {
+              if (buf == "") return
+              if (blank) print ""
+              print buf
+              printed = 1; blank = 0; buf = ""
+            }
+            $0 == heading { found = 1; print; printed = 1; blank = 1; next }
+            !found { next }
+            /^## / { exit }
+            /^[[:space:]]*$/ { flush(); if (printed) blank = 1; next }
+            /^- / { flush(); buf = $0; next }
+            {
+              line = $0
+              sub(/^[[:space:]]+/, "", line)
+              buf = (buf == "") ? line : buf " " line
+            }
+            END { flush() }
+          ' go_domestia/CHANGELOG.md > notes.md
+
+          # Only the heading, or nothing at all, means there is no entry
+          if [ "$(grep -c . notes.md)" -le 1 ]; then
+            echo "::error::No '## $VERSION' section in go_domestia/CHANGELOG.md"
+            exit 1
+          fi
+
+          previous=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -n "$previous" ]; then
+            printf '\n**Full Changelog**: %s/%s/compare/%s...%s\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$previous" "$VERSION" >> notes.md
+          fi
+
+          cat notes.md
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - run: go vet ./...
+
+      - run: go test ./...
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm64
+          build-args: VERSION=${{ env.VERSION }}
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:latest
+          push: true
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --notes-file notes.md \
+            --latest
