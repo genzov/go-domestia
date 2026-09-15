@@ -13,6 +13,10 @@ import (
 	"github.com/genzov/go-domestia/config"
 )
 
+// version is set at build time via -ldflags "-X main.version=<version>" and
+// reported to Home Assistant as the device's software version.
+var version string
+
 func main() {
 	// Config path is overridable via CONFIG_PATH (e.g. /data/options.json when
 	// running as a Home Assistant add-on), defaulting to the local file.
@@ -28,7 +32,7 @@ func main() {
 
 	log.Printf("Connecting to %v, managing %v relays", cfg.IpAddress, len(cfg.Lights))
 
-	b, err := bridge.New(cfg)
+	b, err := bridge.New(cfg, version)
 	if err != nil {
 		log.Fatalf("Failed to set up bridge: %v", err)
 	}

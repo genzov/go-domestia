@@ -21,13 +21,14 @@ const (
 type LightConfiguration struct {
 	ConfigTopic string
 
-	Name              string `json:"name"`
-	UniqueId          string `json:"unique_id"`
-	CommandTopic      string `json:"command_topic"`
-	StateTopic        string `json:"state_topic"`
-	AvailabilityTopic string `json:"availability_topic"`
-	Schema            string `json:"schema"`
-	Brightness        bool   `json:"brightness"`
+	Name              *string `json:"name"` // Always null, so Home Assistant names the entity after its device
+	UniqueId          string  `json:"unique_id"`
+	CommandTopic      string  `json:"command_topic"`
+	StateTopic        string  `json:"state_topic"`
+	AvailabilityTopic string  `json:"availability_topic"`
+	Schema            string  `json:"schema"`
+	Brightness        bool    `json:"brightness"`
+	Device            *Device `json:"device,omitempty"`
 }
 
 func NewLightConfiguration(name string, uniqueId string, dimmable bool) *LightConfiguration {
@@ -35,7 +36,6 @@ func NewLightConfiguration(name string, uniqueId string, dimmable bool) *LightCo
 
 	return &LightConfiguration{
 		ConfigTopic:       fmt.Sprintf("homeassistant/light/%v/config", entityId),
-		Name:              name,
 		UniqueId:          uniqueId,
 		CommandTopic:      fmt.Sprintf("domestia/light/%v/set", entityId),
 		StateTopic:        fmt.Sprintf("domestia/light/%v/state", entityId),

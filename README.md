@@ -13,7 +13,8 @@ Assistant cannot talk to directly. This bridge sits between the two:
 
 - **Discovers lights automatically.** On startup it publishes a retained MQTT
   discovery config for each configured relay, so Home Assistant creates the
-  light entities by itself.
+  light entities by itself. Each light is registered as its own Home Assistant
+  device, named after the light.
 - **Reflects controller state.** It polls the controller on a fixed interval
   and publishes on/off state and brightness to MQTT, but only when something
   actually changes.
@@ -102,7 +103,6 @@ Copy [`domestia.sample.json`](domestia.sample.json) to `domestia.json` and edit 
 
 > **Note:** `domestia.json` contains real credentials and is git-ignored. Do not
 > commit it.
-
 ## Building the Docker image
 
 The included [`Dockerfile`](Dockerfile) is a multi-stage, multi-arch build that
@@ -111,8 +111,11 @@ produces a tiny `scratch`-based image containing only the static binary.
 ### Single architecture (your current platform)
 
 ```sh
-docker build -t go-domestia .
+docker build --build-arg VERSION=<version> -t go-domestia .
 ```
+
+The optional `VERSION` build argument is reported to Home Assistant as the
+device's software version.
 
 ### Multi-architecture (using Buildx)
 
@@ -122,6 +125,7 @@ so you can build for the controller's target platform:
 ```sh
 docker buildx build \
   --platform linux/aarch64 \
+  --build-arg VERSION=<version> \
   -t ghcr.io/genzov/go-domestia-aarch64:<version> \
   --push .
 ```

@@ -18,6 +18,8 @@ type Bridge struct {
 	configuration *config.Configuration
 	domestia      *domestia.Client
 	mqtt          mqtt.Client
+	// Software version reported on each light's Home Assistant device
+	version string
 
 	// Channel to trigger a pull and publish of controller state
 	updateChannel chan bool
@@ -25,7 +27,9 @@ type Bridge struct {
 	relayToBrightness map[uint8]uint8
 }
 
-func New(cfg *config.Configuration) (*Bridge, error) {
+// New creates a bridge. version is reported to Home Assistant as the device's
+// software version.
+func New(cfg *config.Configuration, version string) (*Bridge, error) {
 	domestiaClient, err := domestia.NewClient(cfg.IpAddress, cfg.Lights)
 	if err != nil {
 		return nil, err
@@ -34,6 +38,7 @@ func New(cfg *config.Configuration) (*Bridge, error) {
 	return &Bridge{
 		configuration:     cfg,
 		domestia:          domestiaClient,
+		version:           version,
 		relayToBrightness: make(map[uint8]uint8),
 		// Buffered so the MQTT callback never blocks when the run loop is busy
 		// publishing or has exited; a pending refresh is enough to coalesce.
@@ -191,7 +196,7 @@ func (b *Bridge) lightSubscriptionCallback(light *config.Light) func(mqttClient 
 // registerLight registers a light with Home Assistant
 func (b *Bridge) registerLight(mqttClient mqtt.Client, l *config.Light) error {
 	configTopic := l.HomeAssistant().ConfigTopic
-	if configJson, err := l.HomeAssistantRegistrationJSON(); err != nil {
+	if configJson, err := l.HomeAssistantRegistrationJSON(b.version); err != nil {
 		return fmt.Errorf("error marshalling light configuration: %v", err)
 	} else if t := mqttClient.Publish(configTopic, 0, true, configJson); t.Wait() && t.Error() != nil {
 		return fmt.Errorf("MQTT publish failed: %v", t.Error())

@@ -48,7 +48,8 @@ lights:
 ## Usage
 
 1. Fill in the controller IP, MQTT details and your lights.
-2. Start the add-on. Your lights appear automatically in Home Assistant.
+2. Start the add-on. Your lights appear automatically in Home Assistant, each
+   as its own device named after the light.
 3. Check the **Log** tab for connection status and per-light state changes.
 
 The add-on shuts down cleanly on stop, marking all lights unavailable in Home

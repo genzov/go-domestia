@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+- Each light is registered as its own Home Assistant device, named after the
+  light and reporting the add-on version. Existing entities keep their IDs and
+  are attached to their device automatically.
+
 ## 1.1.0
 
 - Correct brightness scaling: Home Assistant's 0–255 brightness is now rounded
