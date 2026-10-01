@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 
 	"github.com/genzov/go-domestia/bridge"
 	"github.com/genzov/go-domestia/config"
@@ -27,15 +26,13 @@ func main() {
 
 	cfg, err := config.LoadConfiguration(configPath)
 	if err != nil {
-		log.Fatalf("Error loading configuration: %v", err)
+		slog.Error("Error loading configuration", "err", err)
+		os.Exit(1)
 	}
 
-	log.Printf("Connecting to %v, managing %v relays", cfg.IpAddress, len(cfg.Lights))
+	slog.Info("Connecting to controller", "ip_address", cfg.IpAddress, "relays", len(cfg.Lights))
 
-	b, err := bridge.New(cfg, version)
-	if err != nil {
-		log.Fatalf("Failed to set up bridge: %v", err)
-	}
+	b := bridge.New(cfg, version)
 
 	// Cancel the context on SIGINT/SIGTERM so the bridge can shut down cleanly
 	// (marking lights unavailable) instead of being killed mid-flight.
@@ -43,17 +40,16 @@ func main() {
 	defer stop()
 
 	for {
-		if err := b.Run(ctx); err == nil {
+		err := b.Run(ctx)
+		if err == nil {
 			// Run only returns nil when the context was cancelled.
 			break
-		} else {
-			log.Errorf("Bridge returned: %v, restarting", err)
 		}
+		slog.Error("Bridge failed, restarting", "err", err)
 
 		// Back off before restarting, but bail out immediately if we're shutting down.
 		select {
 		case <-ctx.Done():
-			break
 		case <-time.After(time.Second):
 		}
 		if ctx.Err() != nil {
@@ -61,5 +57,5 @@ func main() {
 		}
 	}
 
-	log.Print("Shutting down")
+	slog.Info("Shutting down")
 }

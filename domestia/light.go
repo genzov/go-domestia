@@ -14,7 +14,7 @@ func NewLight(cfg *config.Light, brightness uint8) *Light {
 	// to full brightness. Dimmable relays use 1 as a legitimate lowest dim
 	// level (~2%), so their values must be left untouched.
 	if brightness == 1 && !cfg.Dimmable {
-		brightness = maxBrightness
+		brightness = MaxBrightness
 	}
 
 	return &Light{
@@ -24,9 +24,5 @@ func NewLight(cfg *config.Light, brightness uint8) *Light {
 }
 
 func (l *Light) IsMaxBrightness() bool {
-	return l.Brightness == maxBrightness
-}
-
-func (l *Light) IsMinBrightness() bool {
-	return l.Brightness == 0
+	return l.Brightness == MaxBrightness
 }

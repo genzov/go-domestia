@@ -7,10 +7,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-
-	log "github.com/sirupsen/logrus"
-
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 type Configuration struct {
@@ -32,21 +28,15 @@ type MQTT struct {
 }
 
 func LoadConfiguration(filename string) (*Configuration, error) {
-	file, err := os.Open(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if cerr := file.Close(); cerr != nil {
-			log.Warnf("Failed to close config file %q: %v", filename, cerr)
-		}
-	}()
 
-	decoder := json.NewDecoder(file)
 	configuration := &Configuration{
 		RefreshFrequency: 2000,
 	}
-	if err := decoder.Decode(configuration); err != nil {
+	if err := json.Unmarshal(data, configuration); err != nil {
 		return nil, err
 	}
 
@@ -65,19 +55,4 @@ func LoadConfiguration(filename string) (*Configuration, error) {
 	}
 
 	return configuration, nil
-}
-
-func (m *MQTT) ClientOptions() *mqtt.ClientOptions {
-	return mqtt.NewClientOptions().
-		AddBroker(fmt.Sprintf("tcp://%v:1883", m.IpAddress)).
-		SetClientID("go-domestia").
-		SetUsername(m.Username).
-		SetPassword(m.Password).
-		SetAutoReconnect(true).
-		SetConnectionLostHandler(func(client mqtt.Client, err error) {
-			log.Printf("MQTT connection lost: %v", err)
-		}).
-		SetReconnectingHandler(func(client mqtt.Client, opts *mqtt.ClientOptions) {
-			log.Printf("MQTT reconnecting")
-		})
 }

@@ -53,7 +53,6 @@ Assistant cannot talk to directly. This bridge sits between the two:
 
 - **Go** (see `go.mod` for the exact version)
 - [`eclipse/paho.mqtt.golang`](https://github.com/eclipse/paho.mqtt.golang) — MQTT client
-- [`sirupsen/logrus`](https://github.com/sirupsen/logrus) — structured logging
 - **Docker** (`aarch64`, `armv7`, `amd64`) for distribution
 - Packaged as a **Home Assistant add-on** (`config.yaml`)
 
@@ -149,8 +148,7 @@ Releases are published by [`release.yml`](.github/workflows/release.yml). To
 release:
 
 1. Add a `## <version>` section to [`CHANGELOG.md`](go_domestia/CHANGELOG.md).
-2. Bump `version` in [`config.yaml`](go_domestia/config.yaml) and
-   [`config.sample.yaml`](go_domestia/config.sample.yaml).
+2. Bump `version` in [`config.yaml`](go_domestia/config.yaml).
 3. Merge to `main`.
 
 The workflow runs the tests, pushes `ghcr.io/genzov/go-domestia-<arch>:<version>`
@@ -208,8 +206,8 @@ them against the `schema:` block, and writes the result to `/data/options.json`
    Repositories**.
 2. Install the **Domestia Bridge** add-on.
 3. Configure it in the add-on **Configuration** tab — see
-   [`config.sample.yaml`](go_domestia/config.sample.yaml) for a fully worked-out example of
-   the available options.
+   [`DOCS.md`](go_domestia/DOCS.md) for the available options and a worked-out
+   example.
 4. Start the add-on. Your lights appear automatically in Home Assistant.
 
 ## Project layout

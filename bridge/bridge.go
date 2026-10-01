@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/genzov/go-domestia/config"
@@ -21,7 +20,6 @@ import (
 type Bridge struct {
 	configuration *config.Configuration
 	domestia      *domestia.Client
-	mqtt          mqtt.Client
 	// Software version reported on each light's Home Assistant device
 	version string
 
@@ -54,21 +52,16 @@ const lightTopicPrefix = "domestia/light/"
 
 // New creates a bridge. version is reported to Home Assistant as the device's
 // software version.
-func New(cfg *config.Configuration, version string) (*Bridge, error) {
-	domestiaClient, err := domestia.NewClient(cfg.IpAddress, cfg.Lights)
-	if err != nil {
-		return nil, err
-	}
-
+func New(cfg *config.Configuration, version string) *Bridge {
 	return &Bridge{
 		configuration:     cfg,
-		domestia:          domestiaClient,
+		domestia:          domestia.NewClient(cfg.IpAddress, cfg.Lights),
 		version:           version,
 		relayToBrightness: make(map[uint8]uint8),
 		// Buffered so the MQTT callback never blocks when the run loop is busy
 		// publishing or has exited; a pending refresh is enough to coalesce.
 		updateChannel: make(chan bool, 1),
-	}, nil
+	}
 }
 
 // Run runs the bridge, blocking. If this function returns an error it can be restarted.
@@ -79,11 +72,7 @@ func (b *Bridge) Run(ctx context.Context) error {
 		return err
 	}
 
-	defer func() {
-		mqttClient.Disconnect(100)
-	}()
-
-	b.mqtt = mqttClient
+	defer mqttClient.Disconnect(100)
 
 	b.removeOrphanedConfigs(ctx, mqttClient)
 
@@ -114,7 +103,7 @@ func (b *Bridge) Run(ctx context.Context) error {
 		}
 		b.handleControllerSuccess(mqttClient)
 
-		if err := b.publishLightState(domestiaState); err != nil {
+		if err := b.publishLightState(mqttClient, domestiaState); err != nil {
 			return err
 		}
 	}
@@ -126,9 +115,9 @@ func (b *Bridge) handleControllerFailure(client mqtt.Client, err error) {
 	b.controllerFailures++
 
 	if b.controllerFailures < maxControllerFailures {
-		log.Warnf("Failed to fetch controller state (attempt %v): %v", b.controllerFailures, err)
+		slog.Warn("Failed to fetch controller state", "attempt", b.controllerFailures, "err", err)
 	} else if !b.controllerUnavailable.Swap(true) {
-		log.Errorf("Failed to fetch controller state %v times, marking lights unavailable: %v", b.controllerFailures, err)
+		slog.Error("Failed to fetch controller state repeatedly, marking lights unavailable", "attempts", b.controllerFailures, "err", err)
 		b.publishAvailability(client, false)
 	}
 }
@@ -139,24 +128,36 @@ func (b *Bridge) handleControllerSuccess(client mqtt.Client) {
 	b.controllerFailures = 0
 
 	if b.controllerUnavailable.Swap(false) {
-		log.Print("Controller reachable again, marking lights available")
+		slog.Info("Controller reachable again, marking lights available")
 		b.publishAvailability(client, true)
 	}
 }
 
 // connectMQTT creates and connects MQTT client
 func (b *Bridge) connectMQTT() (mqtt.Client, error) {
-	opts := b.configuration.MQTT.ClientOptions()
-	// Last Will: if the bridge disconnects ungracefully, the broker publishes
-	// "offline" so Home Assistant marks the lights unavailable.
-	opts.SetWill(homeassistant.AvailabilityTopic, homeassistant.PayloadNotAvailable, 0, true)
+	cfg := b.configuration.MQTT
+	opts := mqtt.NewClientOptions().
+		AddBroker(fmt.Sprintf("tcp://%v:1883", cfg.IpAddress)).
+		SetClientID("go-domestia").
+		SetUsername(cfg.Username).
+		SetPassword(cfg.Password).
+		SetAutoReconnect(true).
+		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
+			slog.Warn("MQTT connection lost", "err", err)
+		}).
+		SetReconnectingHandler(func(mqtt.Client, *mqtt.ClientOptions) {
+			slog.Info("MQTT reconnecting")
+		}).
+		// Last Will: if the bridge disconnects ungracefully, the broker publishes
+		// "offline" so Home Assistant marks the lights unavailable.
+		SetWill(homeassistant.AvailabilityTopic, homeassistant.PayloadNotAvailable, 0, true)
 	// Configure MQTT subscriptions in the ConnectHandler to make sure they are set up after reconnect
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		// Log rather than exit: this runs on the MQTT client's goroutine, and
 		// killing the process here would defeat both auto-reconnect and the
 		// restart-on-error loop in main. The handler fires again on reconnect.
 		if err := b.setupLights(client); err != nil {
-			log.Errorf("Failed to register with MQTT: %v", err)
+			slog.Error("Failed to register with MQTT", "err", err)
 			return
 		}
 		// Lights are registered; announce that the bridge is online, unless the
@@ -185,7 +186,7 @@ func (b *Bridge) removeOrphanedConfigs(ctx context.Context, client mqtt.Client) 
 		defer mutex.Unlock()
 		retained[msg.Topic()] = msg.Payload()
 	}); t.Wait() && t.Error() != nil {
-		log.Warnf("Failed to look for orphaned discovery configs: %v", t.Error())
+		slog.Warn("Failed to look for orphaned discovery configs", "err", t.Error())
 		return
 	}
 
@@ -195,16 +196,16 @@ func (b *Bridge) removeOrphanedConfigs(ctx context.Context, client mqtt.Client) 
 	}
 
 	if t := client.Unsubscribe(discoveryConfigTopics); t.Wait() && t.Error() != nil {
-		log.Warnf("Failed to unsubscribe from discovery configs: %v", t.Error())
+		slog.Warn("Failed to unsubscribe from discovery configs", "err", t.Error())
 	}
 
 	mutex.Lock()
 	defer mutex.Unlock()
 
 	for _, topic := range orphanedTopics(retained, b.configuration.Lights) {
-		log.Printf("Removing orphaned retained message on %v", topic)
+		slog.Info("Removing orphaned retained message", "topic", topic)
 		if t := client.Publish(topic, 0, true, ""); t.Wait() && t.Error() != nil {
-			log.Warnf("Failed to remove orphaned retained message on %v: %v", topic, t.Error())
+			slog.Warn("Failed to remove orphaned retained message", "topic", topic, "err", t.Error())
 		}
 	}
 }
@@ -245,7 +246,7 @@ func orphanedTopics(retained map[string][]byte, lights []*config.Light) []string
 		}
 	}
 
-	sort.Strings(orphans)
+	slices.Sort(orphans)
 
 	return orphans
 }
@@ -259,7 +260,7 @@ func (b *Bridge) publishAvailability(client mqtt.Client, available bool) {
 	}
 
 	if t := client.Publish(homeassistant.AvailabilityTopic, 0, true, payload); t.Wait() && t.Error() != nil {
-		log.Errorf("Failed to publish availability %q: %v", payload, t.Error())
+		slog.Error("Failed to publish availability", "payload", payload, "err", t.Error())
 	}
 }
 
@@ -291,19 +292,19 @@ func (b *Bridge) lightSubscriptionCallback(light *config.Light) func(mqttClient 
 		relay := light.Relay
 		cmd := &homeassistant.LightState{}
 		if err := json.Unmarshal(msg.Payload(), cmd); err != nil {
-			log.Errorf("MQTT deserialization failed: %v", err)
+			slog.Error("MQTT deserialization failed", "err", err)
 			return
 		}
 
 		if cmd.State == "ON" {
-			log.Printf("Turning on %v", light.Name)
+			slog.Info("Turning on", "light", light.Name)
 			if err := b.domestia.TurnOn(relay); err != nil {
-				log.Errorf("Failed to turn on %v: %v", light.Name, err)
+				slog.Error("Failed to turn on", "light", light.Name, "err", err)
 			}
 
 			if !light.Dimmable {
 				if err := b.domestia.SetMaxBrightness(relay); err != nil {
-					log.Errorf("Failed to set %v to max brightness: %v", light.Name, err)
+					slog.Error("Failed to set max brightness", "light", light.Name, "err", err)
 				}
 			} else if cmd.Brightness != 0 {
 				brightness := domestiaBrightness(cmd)
@@ -315,13 +316,13 @@ func (b *Bridge) lightSubscriptionCallback(light *config.Light) func(mqttClient 
 				}
 
 				if err := b.domestia.SetBrightness(relay, brightness); err != nil {
-					log.Errorf("Failed to set brightness of %v: %v", light.Name, err)
+					slog.Error("Failed to set brightness", "light", light.Name, "err", err)
 				}
 			}
 		} else {
-			log.Printf("Turning off %v", light.Name)
+			slog.Info("Turning off", "light", light.Name)
 			if err := b.domestia.TurnOff(relay); err != nil {
-				log.Errorf("Failed to turn off %v: %v", light.Name, err)
+				slog.Error("Failed to turn off", "light", light.Name, "err", err)
 			}
 		}
 
@@ -343,7 +344,7 @@ func (b *Bridge) registerLight(mqttClient mqtt.Client, l *config.Light) error {
 		return fmt.Errorf("MQTT publish failed: %v", t.Error())
 	}
 
-	log.Printf("Registered %v with Home Assistant", l.Name)
+	slog.Info("Registered with Home Assistant", "light", l.Name)
 
 	return nil
 }
@@ -351,35 +352,31 @@ func (b *Bridge) registerLight(mqttClient mqtt.Client, l *config.Light) error {
 // Publishes updates of the given controller state to mqtt.
 // Also makes sure always-on lights are in fact always on. Also makes sure
 // that non-dimmable lights are not dimmed.
-func (b *Bridge) publishLightState(domestiaState []*domestia.Light) error {
+func (b *Bridge) publishLightState(mqttClient mqtt.Client, domestiaState []*domestia.Light) error {
 	for _, light := range domestiaState {
 		configuration := light.Configuration
 
-		var shouldPublishUpdate bool
-		if brightness, present := b.relayToBrightness[configuration.Relay]; !present {
-			shouldPublishUpdate = true
-		} else {
-			shouldPublishUpdate = light.Brightness != brightness
-		}
+		brightness, seen := b.relayToBrightness[configuration.Relay]
+		shouldPublishUpdate := !seen || light.Brightness != brightness
 
 		if configuration.AlwaysOn && !light.IsMaxBrightness() {
 			// If the light is always-on, and the brightness is not 100%, set it to 100%
-			log.Printf("Turning always-on light %v back on", configuration.Name)
+			slog.Info("Turning always-on light back on", "light", configuration.Name)
 
 			if err := b.domestia.TurnOn(configuration.Relay); err != nil {
-				log.Errorf("Failed to turn on always-on light %v: %v", configuration.Name, err)
+				slog.Error("Failed to turn on always-on light", "light", configuration.Name, "err", err)
 			}
 			if err := b.domestia.SetMaxBrightness(configuration.Relay); err != nil {
-				log.Errorf("Failed to set always-on light %v to max brightness: %v", configuration.Name, err)
+				slog.Error("Failed to set always-on light to max brightness", "light", configuration.Name, "err", err)
 			}
 
 			shouldPublishUpdate = false
-		} else if !configuration.Dimmable && !light.IsMinBrightness() && !light.IsMaxBrightness() {
+		} else if !configuration.Dimmable && light.Brightness != 0 && !light.IsMaxBrightness() {
 			// If the light is not dimmable and on it should always be set to 100%
-			log.Printf("Non-dimmable light %v at brightness %v, resetting", configuration.Name, light.Brightness)
+			slog.Info("Non-dimmable light dimmed, resetting", "light", configuration.Name, "brightness", light.Brightness)
 
 			if err := b.domestia.SetMaxBrightness(configuration.Relay); err != nil {
-				log.Errorf("Failed to reset non-dimmable light %v: %v", configuration.Name, err)
+				slog.Error("Failed to reset non-dimmable light", "light", configuration.Name, "err", err)
 			}
 
 			shouldPublishUpdate = false
@@ -388,12 +385,12 @@ func (b *Bridge) publishLightState(domestiaState []*domestia.Light) error {
 		}
 
 		if shouldPublishUpdate {
-			log.Printf("%v is now %v", configuration.Name, describeLightState(light))
+			slog.Info("Light state changed", "light", configuration.Name, "state", describeLightState(light))
 
 			stateTopic := configuration.HomeAssistant().StateTopic
 			if stateJson, err := homeAssistantStateJSON(light); err != nil {
 				return fmt.Errorf("[%v] Error marshalling light state: %v", stateTopic, err)
-			} else if t := b.mqtt.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
+			} else if t := mqttClient.Publish(stateTopic, 0, true, stateJson); t.Wait() && t.Error() != nil {
 				return fmt.Errorf("[%v] Publish error: %v", stateTopic, t.Error())
 			}
 		}

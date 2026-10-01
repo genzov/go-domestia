@@ -41,12 +41,6 @@ jobs:
             exit 1
           fi
 
-          sample=$(sed -n 's/^version: "\(.*\)"$/\1/p' go_domestia/config.sample.yaml)
-          if [ "$sample" != "$version" ]; then
-            echo "::error::config.sample.yaml has version $sample, config.yaml has $version"
-            exit 1
-          fi
-
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if git rev-parse -q --verify "refs/tags/$version" > /dev/null; then
             echo "Release $version already exists, nothing to do"

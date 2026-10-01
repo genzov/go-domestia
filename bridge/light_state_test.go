@@ -59,7 +59,7 @@ func TestHomeAssistantBrightness(t *testing.T) {
 // TestBrightnessRoundTrip verifies that converting a Domestia brightness to the
 // Home Assistant scale and back yields the original value for every valid level.
 func TestBrightnessRoundTrip(t *testing.T) {
-	for b := uint8(0); b <= maxDomestiaBrightness; b++ {
+	for b := uint8(0); b <= domestia.MaxBrightness; b++ {
 		ha := homeAssistantBrightness(&domestia.Light{Brightness: b})
 		got := domestiaBrightness(&homeassistant.LightState{Brightness: ha})
 		if got != b {

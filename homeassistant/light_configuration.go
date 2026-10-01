@@ -17,6 +17,23 @@ const (
 	PayloadNotAvailable = "offline"
 )
 
+// Device represents the Home Assistant device an entity belongs to. Each light
+// is registered as its own device, identified by its relay.
+type Device struct {
+	Identifiers  []string `json:"identifiers"`
+	Name         string   `json:"name"`
+	Manufacturer string   `json:"manufacturer"`
+	Model        string   `json:"model,omitempty"`
+	SwVersion    string   `json:"sw_version,omitempty"`
+}
+
+// LightState represents light state on Home Assistant. Either as current state in
+// the state update topic, or requested state in command topic.
+type LightState struct {
+	State      string `json:"state"`
+	Brightness int    `json:"brightness"`
+}
+
 // LightConfiguration represents a Home Assistant light, as used during light registration
 type LightConfiguration struct {
 	ConfigTopic string `json:"-"` // Topic the configuration is published on, not part of the payload
@@ -32,7 +49,7 @@ type LightConfiguration struct {
 }
 
 func NewLightConfiguration(name string, uniqueId string, dimmable bool) *LightConfiguration {
-	entityId := strings.Replace(strings.ToLower(name), " ", "_", -1)
+	entityId := strings.ReplaceAll(strings.ToLower(name), " ", "_")
 
 	return &LightConfiguration{
 		ConfigTopic:       fmt.Sprintf("homeassistant/light/%v/config", entityId),

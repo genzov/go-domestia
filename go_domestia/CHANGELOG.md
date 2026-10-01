@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1
+
+- Log lines now have a level and key=value details, e.g.
+  `INFO Light state changed light="Living room" state=on`. The same events are
+  logged as before.
+
 ## 1.3.0
 
 - New optional `model` option to set the controller model (`DMC-012-003` or

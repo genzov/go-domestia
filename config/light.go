@@ -24,11 +24,14 @@ func (l *Light) HomeAssistant() *homeassistant.LightConfiguration {
 // The controller model is reported on the device when set.
 func (l *Light) HomeAssistantRegistrationJSON(model string, swVersion string) (string, error) {
 	config := l.HomeAssistant()
-	config.Device = homeassistant.NewDevice(fmt.Sprintf("domestia_relay_%v", l.Relay), l.Name, model, swVersion)
-
-	if configMarshalled, err := json.Marshal(config); err != nil {
-		return "", err
-	} else {
-		return string(configMarshalled), nil
+	config.Device = &homeassistant.Device{
+		Identifiers:  []string{fmt.Sprintf("domestia_relay_%v", l.Relay)},
+		Name:         l.Name,
+		Manufacturer: "Domestia",
+		Model:        model,
+		SwVersion:    swVersion,
 	}
+
+	configMarshalled, err := json.Marshal(config)
+	return string(configMarshalled), err
 }
