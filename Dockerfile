@@ -4,7 +4,7 @@ ARG VERSION
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH GOARM=${TARGETVARIANT#v} \
-    go build -ldflags "-X main.version=${VERSION}" -o /out/go-domestia
+    go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/go-domestia
 
 FROM scratch
 # Links the published image to the repository, which lets release workflows push it
