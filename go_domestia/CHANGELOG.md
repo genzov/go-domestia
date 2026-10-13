@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.4.0
+
+- Lights now reflect their real state in Home Assistant after a short MQTT
+  outage. Previously a change made while the broker was unreachable could stay
+  out of date until the light changed again.
+- Commands from Home Assistant no longer hold up other messages while the
+  controller is slow or unreachable, and are executed in the order received. A
+  command that is not an explicit `ON` or `OFF` is ignored instead of switching
+  the light off.
+- A garbled reply from the controller is now treated as a failed poll instead
+  of a successful one, and replies that arrive in several pieces are read
+  completely.
+- `refresh_frequency` must now be at least 250 ms (it used to be anything above
+  0). A lower value stops the add-on from starting; raise it if you used one.
+- The light configuration is now checked at startup, with a clear error. Relay
+  numbers must be 1 or higher and used by one light only. Light names must not
+  be empty, contain `+`, `#` or `/`, or end up as the same entity as another
+  light. Always-on lights are exempt from the name rules.
+- Updated Go and dependencies to fix known security vulnerabilities in the
+  Go standard library.
+
 ## 1.3.2
 
 - Occasional controller timeouts no longer flood the log. A single failed poll
