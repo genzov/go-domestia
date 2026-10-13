@@ -11,7 +11,7 @@ configuration:
     name: Refresh frequency (ms)
     description: >-
       How often to poll the controller for state changes and publish updates.
-      Defaults to 2000 ms.
+      Defaults to 2000 ms, minimum 250 ms.
   mqtt:
     name: MQTT broker
     description: >-

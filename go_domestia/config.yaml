@@ -23,7 +23,7 @@ options:
 schema:
   ip_address: str
   model: list(DMC-012-003|DMC-008-001)?
-  refresh_frequency: int?
+  refresh_frequency: int(250,)?
   mqtt:
     ip_address: str
     username: str

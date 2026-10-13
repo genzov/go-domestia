@@ -25,6 +25,9 @@ type Bridge struct {
 
 	// Channel to trigger a pull and publish of controller state
 	updateChannel chan bool
+	// Commands received from Home Assistant, executed in order by a worker so
+	// the MQTT callback never blocks on the controller
+	commands chan lightCommand
 	// Map to store current brightnesses of lights, used to publish only on changes to state
 	relayToBrightness map[uint8]uint8
 
@@ -38,6 +41,16 @@ type Bridge struct {
 // maxControllerFailures is how many consecutive controller polls may fail
 // before the lights are marked unavailable in Home Assistant.
 const maxControllerFailures = 3
+
+// commandQueueSize is how many commands may wait for the controller before new
+// ones are dropped.
+const commandQueueSize = 32
+
+// lightCommand is a command from Home Assistant for a light.
+type lightCommand struct {
+	light *config.Light
+	state *homeassistant.LightState
+}
 
 // discoveryConfigTopics matches the Home Assistant discovery configs of all lights.
 const discoveryConfigTopics = "homeassistant/light/+/config"
@@ -61,18 +74,35 @@ func New(cfg *config.Configuration, version string) *Bridge {
 		// Buffered so the MQTT callback never blocks when the run loop is busy
 		// publishing or has exited; a pending refresh is enough to coalesce.
 		updateChannel: make(chan bool, 1),
+		commands:      make(chan lightCommand, commandQueueSize),
 	}
 }
 
 // Run runs the bridge, blocking. If this function returns an error it can be restarted.
 // If it returns nil (because ctx was cancelled), it was cleanly shut down.
 func (b *Bridge) Run(ctx context.Context) error {
+	// Forget what was published before: a previous run may have failed before
+	// publishing a change, or the broker may have lost its retained state.
+	clear(b.relayToBrightness)
+
 	mqttClient, err := b.connectMQTT()
 	if err != nil {
 		return err
 	}
 
 	defer mqttClient.Disconnect(100)
+
+	workerCtx, stopWorker := context.WithCancel(ctx)
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		b.runCommands(workerCtx)
+	}()
+	// Wait for the worker so a restarted run never has two of them
+	defer func() {
+		stopWorker()
+		<-workerDone
+	}()
 
 	b.removeOrphanedConfigs(ctx, mqttClient)
 
@@ -286,52 +316,103 @@ func (b *Bridge) setupLights(mqttClient mqtt.Client) error {
 	return nil
 }
 
-// lightSubscriptionCallback creates callback to handle messages on light command topic
+// lightSubscriptionCallback creates callback to handle messages on light command topic.
+// It only queues the command: talking to the controller can take seconds and the
+// MQTT client does not deliver further messages while a callback is running.
 func (b *Bridge) lightSubscriptionCallback(light *config.Light) func(mqttClient mqtt.Client, msg mqtt.Message) {
 	return func(mqttClient mqtt.Client, msg mqtt.Message) {
-		relay := light.Relay
 		cmd := &homeassistant.LightState{}
 		if err := json.Unmarshal(msg.Payload(), cmd); err != nil {
 			slog.Error("MQTT deserialization failed", "err", err)
 			return
 		}
 
-		if cmd.State == "ON" {
-			slog.Info("Turning on", "light", light.Name)
-			if err := b.domestia.TurnOn(relay); err != nil {
-				slog.Error("Failed to turn on", "light", light.Name, "err", err)
-			}
-
-			if !light.Dimmable {
-				if err := b.domestia.SetMaxBrightness(relay); err != nil {
-					slog.Error("Failed to set max brightness", "light", light.Name, "err", err)
-				}
-			} else if cmd.Brightness != 0 {
-				brightness := domestiaBrightness(cmd)
-				// A non-zero Home Assistant brightness must not round down to 0,
-				// which would switch the light off instead of dimming it to its
-				// lowest level. Floor it to the controller's minimum on level.
-				if brightness == 0 {
-					brightness = 1
-				}
-
-				if err := b.domestia.SetBrightness(relay, brightness); err != nil {
-					slog.Error("Failed to set brightness", "light", light.Name, "err", err)
-				}
-			}
-		} else {
-			slog.Info("Turning off", "light", light.Name)
-			if err := b.domestia.TurnOff(relay); err != nil {
-				slog.Error("Failed to turn off", "light", light.Name, "err", err)
-			}
+		if cmdAction(cmd) == actionIgnore {
+			slog.Warn("Ignoring command with unknown state", "light", light.Name, "state", cmd.State)
+			return
 		}
 
-		// Trigger pulling and publishing controller state. Non-blocking: if a
-		// refresh is already pending the ticker will pick up this change too.
 		select {
-		case b.updateChannel <- true:
+		case b.commands <- lightCommand{light: light, state: cmd}:
 		default:
+			slog.Warn("Too many pending commands, dropping command", "light", light.Name)
 		}
+	}
+}
+
+// runCommands executes queued commands until ctx is cancelled.
+func (b *Bridge) runCommands(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case cmd := <-b.commands:
+			b.executeCommand(cmd.light, cmd.state)
+		}
+	}
+}
+
+// action is what a Home Assistant command asks of a light.
+type action int
+
+const (
+	actionIgnore action = iota
+	actionOn
+	actionOff
+)
+
+// cmdAction returns what a command asks for. Only an explicit "ON" or "OFF"
+// changes the light, so a malformed payload cannot switch it off.
+func cmdAction(cmd *homeassistant.LightState) action {
+	switch cmd.State {
+	case "ON":
+		return actionOn
+	case "OFF":
+		return actionOff
+	default:
+		return actionIgnore
+	}
+}
+
+// executeCommand sends a command from Home Assistant to the controller.
+func (b *Bridge) executeCommand(light *config.Light, cmd *homeassistant.LightState) {
+	relay := light.Relay
+
+	if cmdAction(cmd) == actionOn {
+		slog.Info("Turning on", "light", light.Name)
+		if err := b.domestia.TurnOn(relay); err != nil {
+			slog.Error("Failed to turn on", "light", light.Name, "err", err)
+		}
+
+		if !light.Dimmable {
+			if err := b.domestia.SetMaxBrightness(relay); err != nil {
+				slog.Error("Failed to set max brightness", "light", light.Name, "err", err)
+			}
+		} else if cmd.Brightness != 0 {
+			brightness := domestiaBrightness(cmd)
+			// A non-zero Home Assistant brightness must not round down to 0,
+			// which would switch the light off instead of dimming it to its
+			// lowest level. Floor it to the controller's minimum on level.
+			if brightness == 0 {
+				brightness = 1
+			}
+
+			if err := b.domestia.SetBrightness(relay, brightness); err != nil {
+				slog.Error("Failed to set brightness", "light", light.Name, "err", err)
+			}
+		}
+	} else {
+		slog.Info("Turning off", "light", light.Name)
+		if err := b.domestia.TurnOff(relay); err != nil {
+			slog.Error("Failed to turn off", "light", light.Name, "err", err)
+		}
+	}
+
+	// Trigger pulling and publishing controller state. Non-blocking: if a
+	// refresh is already pending the ticker will pick up this change too.
+	select {
+	case b.updateChannel <- true:
+	default:
 	}
 }
 

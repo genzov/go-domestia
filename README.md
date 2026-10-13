@@ -93,7 +93,7 @@ Copy [`domestia.sample.json`](domestia.sample.json) to `domestia.json` and edit 
 | ------------------- | -------- | -------- | ---------------------------------------------------------------------- |
 | `ip_address`        | string   | yes      | IP address of the Domestia controller.                                 |
 | `model`             | string   | no       | Controller model, `DMC-012-003` or `DMC-008-001`. Shown on HA devices. |
-| `refresh_frequency` | int (ms) | no       | Controller poll interval. Defaults to `2000`. Must be greater than 0.  |
+| `refresh_frequency` | int (ms) | no       | Controller poll interval. Defaults to `2000`. Minimum `250`.           |
 | `mqtt.ip_address`   | string   | yes      | Hostname/IP of the MQTT broker (port `1883`).                          |
 | `mqtt.username`     | string   | no       | MQTT username.                                                         |
 | `mqtt.password`     | string   | no       | MQTT password.                                                         |

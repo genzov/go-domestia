@@ -48,8 +48,13 @@ type LightConfiguration struct {
 	Device            *Device `json:"device,omitempty"`
 }
 
+// EntityId returns the entity id of a light, which forms its MQTT topics.
+func EntityId(name string) string {
+	return strings.ReplaceAll(strings.ToLower(name), " ", "_")
+}
+
 func NewLightConfiguration(name string, uniqueId string, dimmable bool) *LightConfiguration {
-	entityId := strings.ReplaceAll(strings.ToLower(name), " ", "_")
+	entityId := EntityId(name)
 
 	return &LightConfiguration{
 		ConfigTopic:       fmt.Sprintf("homeassistant/light/%v/config", entityId),

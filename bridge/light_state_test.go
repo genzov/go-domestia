@@ -67,3 +67,24 @@ func TestBrightnessRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestCmdAction(t *testing.T) {
+	tests := []struct {
+		state string
+		want  action
+	}{
+		{"ON", actionOn},
+		{"OFF", actionOff},
+		{"", actionIgnore},
+		{"on", actionIgnore},
+		{"TOGGLE", actionIgnore},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.state, func(t *testing.T) {
+			if got := cmdAction(&homeassistant.LightState{State: tt.state}); got != tt.want {
+				t.Errorf("cmdAction(%q) = %v, want %v", tt.state, got, tt.want)
+			}
+		})
+	}
+}
