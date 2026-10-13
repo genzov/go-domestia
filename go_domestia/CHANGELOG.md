@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2
+
+- Occasional controller timeouts no longer flood the log. A single failed poll
+  is retried on the next refresh and only logged at debug level. If the
+  controller keeps failing, the lights are still marked unavailable and an error
+  is logged, as before.
+
 ## 1.3.1
 
 - Log lines now have a level and key=value details, e.g.

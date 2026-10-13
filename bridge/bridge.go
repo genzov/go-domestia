@@ -115,7 +115,7 @@ func (b *Bridge) handleControllerFailure(client mqtt.Client, err error) {
 	b.controllerFailures++
 
 	if b.controllerFailures < maxControllerFailures {
-		slog.Warn("Failed to fetch controller state", "attempt", b.controllerFailures, "err", err)
+		slog.Debug("Failed to fetch controller state", "attempt", b.controllerFailures, "err", err)
 	} else if !b.controllerUnavailable.Swap(true) {
 		slog.Error("Failed to fetch controller state repeatedly, marking lights unavailable", "attempts", b.controllerFailures, "err", err)
 		b.publishAvailability(client, false)
