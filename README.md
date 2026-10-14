@@ -22,7 +22,7 @@ Assistant cannot talk to directly. This bridge sits between the two:
   translates Home Assistant on/off/brightness commands into Domestia controller
   commands.
 - **Supports dimmable and non-dimmable relays.** Brightness is converted
-  between Home Assistant's `0–255` scale and the controller's `0–63` scale, with
+  between Home Assistant's `0–255` scale and the controller's `0–64` scale, with
   proper rounding so low brightness values dim the light instead of switching it
   off. Non-dimmable relays are forced to full brightness.
 - **Supports always-on relays.** Relays marked `always_on` are kept on at full

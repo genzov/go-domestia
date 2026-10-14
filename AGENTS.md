@@ -20,7 +20,7 @@ CI (`.github/workflows/ci.yml`) runs gofmt, `go vet`, `go test`, and a multi-arc
 
 ## Architecture
 
-Package dependencies: `main` → `bridge` → `domestia`, `config`, `homeassistant`; `config` → `homeassistant`.
+Package dependencies: `main` → `bridge` → `domestia`, `config`, `homeassistant`; `domestia` → `config`; `config` → `homeassistant`.
 
 - **`main.go`**: loads config, then runs `bridge.Run` in a restart loop with a 1s backoff. `Run` returns nil only when the context is cancelled (SIGINT/SIGTERM); any error restarts it.
 - **`bridge/`**: the run loop polls the controller on a ticker, or immediately when a command arrives through `updateChannel`. The channel is buffered to 1 and written non-blocking so refreshes coalesce. State is published only when a relay's brightness changes (`relayToBrightness`).
@@ -34,8 +34,7 @@ Package dependencies: `main` → `bridge` → `domestia`, `config`, `homeassista
 
 ### Brightness
 
-The controller scale is 0–`domestia.MaxBrightness` (64; a fully-on relay reads back 64). HA uses 0–255. Conversions in `bridge/light_state.go` round rather than truncate. A non-zero HA brightness is floored to 1 so it dims instead of switching off. A non-dimmable relay reports `1` when on, and `NewLight` normalizes that to max. For dimmable relays, `1` is a real dim level. (README says 0–63; the code is authoritative.)
-
+The controller scale is 0–`domestia.MaxBrightness` (64; a fully-on relay reads back 64). HA uses 0–255. Conversions in `bridge/light_state.go` round rather than truncate. A non-zero HA brightness is floored to 1 so it dims instead of switching off. A non-dimmable relay reports `1` when on, and `NewLight` (`domestia/light.go`) normalizes that to max. For dimmable relays, `1` is a real dim level.
 ### Tests
 
 There are no MQTT or controller fakes. Testable logic is extracted into pure functions (`orphanedTopics`, the brightness conversions, `NewLight`, `packCommand`, config loading) and tested table-style. Follow that pattern rather than mocking clients.

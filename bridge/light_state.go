@@ -13,7 +13,7 @@ import (
 const maxHomeAssistantBrightness = 255
 
 // describeLightState returns a human-readable description of a light's state
-// for logging, e.g. "off", "on" (non-dimmable) or "on at 75% (brightness 47/63)".
+// for logging, e.g. "off", "on" (non-dimmable) or "on at 75% (brightness 48/64)".
 func describeLightState(l *domestia.Light) string {
 	if l.Brightness == 0 {
 		return "off"
