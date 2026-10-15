@@ -57,3 +57,16 @@ To release, bump `version` in `go_domestia/config.yaml` and add a matching `## <
 ## Conventions
 
 Logging uses `log/slog` with a capitalized message and key=value attributes, e.g. `slog.Info("Light state changed", "light", name, "state", s)`.
+
+## Claude Code plugins
+
+Enabled in `.claude/settings.json`. Prefer them over ad-hoc equivalents:
+
+- **gopls-lsp**: use the LSP tool (definitions, references, diagnostics) for Go navigation and renames before grepping or hand-editing.
+- **commit-commands**: use `/commit` and `/commit-push-pr` for commits and PRs.
+- **code-review**: run `/code-review` on non-trivial changes before opening a PR or releasing.
+- **code-simplifier**: run the `code-simplifier:code-simplifier` agent after substantial Go edits.
+- **claude-md-management**: run `/claude-md-management:revise-claude-md` after a session that taught something new; `claude-md-improver` for audits.
+- **frontend-design**, **playwright**: enabled but not applicable; this repo has no web UI.
+
+The project `release` skill (`/release`) is user-invoked only.
